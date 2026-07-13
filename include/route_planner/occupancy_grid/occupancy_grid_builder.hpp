@@ -1,0 +1,27 @@
+#pragma once
+
+#include "route_planner/common/latest_buffer.hpp"
+#include "route_planner/common/pointcloud_xyz_frame.hpp"
+#include "route_planner/common/pose_xy.hpp"
+#include "route_planner/occupancy_grid/occupancy_grid.hpp"
+#include "route_planner/occupancy_grid/occupancy_grid_config.hpp"
+
+namespace route_planner::occupancy_grid {
+
+using OccupancyGridBuffer = common::LatestBuffer<OccupancyGrid>;
+
+class OccupancyGridBuilder {
+public:
+    explicit OccupancyGridBuilder(OccupancyGridConfig config);
+
+    OccupancyGrid build(
+        const common::PointCloudXYZFrame& frame,
+        const common::PoseXY& pose) const;
+
+private:
+    OccupancyGridConfig config_;
+    int width_;
+    int height_;
+};
+
+}  // namespace route_planner::occupancy_grid
