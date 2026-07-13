@@ -77,3 +77,7 @@ test/bags/
 
 # Claude Code
 CLAUDE.md
+
+# vendored
+thirdparty/unitree_sdk2/
+build/
