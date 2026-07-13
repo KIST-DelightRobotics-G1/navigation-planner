@@ -26,10 +26,12 @@ class UnitreePointcloudReader {
 public:
     static UnitreePointcloudReader& instance();
 
-    // topic: the robot's point-cloud relay. Default is the Unitree
-    // utlidar deskewed cloud — verify the exact name on the robot.
+    // topic: the G1's Livox Mid-360 cloud, published by the Unitree
+    // internal driver as the ROS2 topic /utlidar/cloud_livox_mid360 —
+    // reachable without ROS2 through the DDS name mapping (rt/ prefix).
+    // frame_id is "utlidar_lidar" (sensor frame, no motion compensation).
     bool start(int domain_id, const std::string& network_interface,
-               const std::string& topic = "rt/utlidar/cloud_deskewed");
+               const std::string& topic = "rt/utlidar/cloud_livox_mid360");
     void stop();
 
     // ── data buffer (read from any thread) ─────────────────────
