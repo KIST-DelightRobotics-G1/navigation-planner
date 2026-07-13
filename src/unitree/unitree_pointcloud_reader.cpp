@@ -59,13 +59,14 @@ void UnitreePointcloudReader::on_cloud_update(const void* message) {
 }
 
 // LiDAR streams at ~10Hz; 500ms (5 frames) of silence clears the buffer
-// so downstream mapping stops extending a stale world.
+// so downstream mapping stops extending a stale world. Polled at 10ms —
+// same cadence as gearsonic's UnitreeStateReader watchdog.
 void UnitreePointcloudReader::watchdog_loop() {
     using namespace std::chrono_literals;
-    constexpr double stale_ms = 500.0;
+    constexpr double stale_ms = 500.0;  // 5 frames at 10Hz
 
     while (!stop_watchdog_) {
-        std::this_thread::sleep_for(50ms);
+        std::this_thread::sleep_for(10ms);
 
         auto cloud = cloud_buf.GetDataWithTime();
         if (cloud.HasData() && cloud.GetAgeMs() > stale_ms) {
