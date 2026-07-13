@@ -22,9 +22,9 @@ namespace kist {
 //
 // The watchdog clears the buffer when frames stop arriving; consumers
 // key off "has data" (empty-buffer principle).
-class LidarReader {
+class UnitreePointcloudReader {
 public:
-    static LidarReader& instance();
+    static UnitreePointcloudReader& instance();
 
     // topic: the robot's point-cloud relay. Default is the Unitree
     // utlidar deskewed cloud — verify the exact name on the robot.
@@ -39,7 +39,7 @@ public:
     void on_cloud_update(const void* message);
 
 private:
-    LidarReader() = default;
+    UnitreePointcloudReader() = default;
 
     void watchdog_loop();
 

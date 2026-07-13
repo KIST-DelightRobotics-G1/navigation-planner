@@ -5,7 +5,7 @@
 // non-finite point removal, stamp/frame passthrough, and rejection of
 // clouds without x/y/z.
 
-#include "lidar/pointcloud2_decode.hpp"
+#include "unitree/pointcloud2_decode.hpp"
 
 #include <cmath>
 #include <cstdio>

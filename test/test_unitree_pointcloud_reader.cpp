@@ -1,8 +1,8 @@
 // Live LiDAR stream check (robot LAN needed):
-//   ./test_lidar_reader <network_interface> [domain_id] [topic]
+//   ./test_unitree_pointcloud_reader <network_interface> [domain_id] [topic]
 // Prints frame rate, point count, and a sample point once per second.
 
-#include "lidar/lidar_reader.hpp"
+#include "unitree/unitree_pointcloud_reader.hpp"
 
 #include <atomic>
 #include <chrono>
@@ -25,7 +25,7 @@ int main(int argc, char** argv) {
 
     std::signal(SIGINT, [](int) { g_stop = true; });
 
-    auto& reader = LidarReader::instance();
+    auto& reader = UnitreePointcloudReader::instance();
     bool ok = argc >= 4 ? reader.start(domain, iface, argv[3])
                         : reader.start(domain, iface);
     if (!ok)

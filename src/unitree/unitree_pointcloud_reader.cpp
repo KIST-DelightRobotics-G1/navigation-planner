@@ -1,5 +1,5 @@
-#include "lidar/lidar_reader.hpp"
-#include "lidar/pointcloud2_decode.hpp"
+#include "unitree/unitree_pointcloud_reader.hpp"
+#include "unitree/pointcloud2_decode.hpp"
 
 #include <unitree/robot/channel/channel_factory.hpp>
 #include <unitree/robot/channel/channel_subscriber.hpp>
@@ -9,12 +9,12 @@
 
 namespace kist {
 
-LidarReader& LidarReader::instance() {
-    static LidarReader inst;
+UnitreePointcloudReader& UnitreePointcloudReader::instance() {
+    static UnitreePointcloudReader inst;
     return inst;
 }
 
-bool LidarReader::start(int domain_id, const std::string& network_interface,
+bool UnitreePointcloudReader::start(int domain_id, const std::string& network_interface,
                         const std::string& topic) {
     try {
         // Safe when the embedding process already initialized the factory
@@ -25,7 +25,7 @@ bool LidarReader::start(int domain_id, const std::string& network_interface,
         cloud_sub_->InitChannel(
             [this](const void* msg) { on_cloud_update(msg); }, 1);
     } catch (const std::exception& e) {
-        std::cerr << "[LidarReader] DDS init failed on interface \""
+        std::cerr << "[UnitreePointcloudReader] DDS init failed on interface \""
                   << network_interface << "\": " << e.what()
                   << "\n  Check the robot LAN cable and the topic name (\""
                   << topic << "\").\n";
@@ -33,26 +33,26 @@ bool LidarReader::start(int domain_id, const std::string& network_interface,
     }
 
     stop_watchdog_ = false;
-    watchdog_thread_ = std::thread(&LidarReader::watchdog_loop, this);
-    std::cout << "[LidarReader] started on domain=" << domain_id
+    watchdog_thread_ = std::thread(&UnitreePointcloudReader::watchdog_loop, this);
+    std::cout << "[UnitreePointcloudReader] started on domain=" << domain_id
               << " interface=" << network_interface
               << " topic=" << topic << "\n";
     return true;
 }
 
-void LidarReader::stop() {
+void UnitreePointcloudReader::stop() {
     stop_watchdog_ = true;
     if (watchdog_thread_.joinable())
         watchdog_thread_.join();
     cloud_sub_.reset();
 }
 
-void LidarReader::on_cloud_update(const void* message) {
+void UnitreePointcloudReader::on_cloud_update(const void* message) {
     const auto& msg = *static_cast<const sensor_msgs::msg::dds_::PointCloud2_*>(message);
 
     PointCloudXYZFrame frame;
     if (!decode_pointcloud2(msg, frame)) {
-        std::cerr << "[LidarReader] cloud without FLOAT32 x/y/z fields — dropped\n";
+        std::cerr << "[UnitreePointcloudReader] cloud without FLOAT32 x/y/z fields — dropped\n";
         return;
     }
     cloud_buf.SetData(std::move(frame));
@@ -60,7 +60,7 @@ void LidarReader::on_cloud_update(const void* message) {
 
 // LiDAR streams at ~10Hz; 500ms (5 frames) of silence clears the buffer
 // so downstream mapping stops extending a stale world.
-void LidarReader::watchdog_loop() {
+void UnitreePointcloudReader::watchdog_loop() {
     using namespace std::chrono_literals;
     constexpr double stale_ms = 500.0;
 
@@ -69,7 +69,7 @@ void LidarReader::watchdog_loop() {
 
         auto cloud = cloud_buf.GetDataWithTime();
         if (cloud.HasData() && cloud.GetAgeMs() > stale_ms) {
-            std::cerr << "[LidarReader] cloud stale — cleared\n";
+            std::cerr << "[UnitreePointcloudReader] cloud stale — cleared\n";
             cloud_buf.Clear();
         }
     }

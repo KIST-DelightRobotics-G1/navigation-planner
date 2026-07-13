@@ -16,17 +16,17 @@ if(NOT TARGET unitree_sdk2)
     add_subdirectory(thirdparty/unitree_sdk2)
 endif()
 
-# ─── lidar_reader ─────────────────────────────────────────────────────────────
-add_library(lidar_reader STATIC
-    src/lidar/lidar_reader.cpp
-    src/lidar/pointcloud2_decode.cpp
+# ─── unitree_pointcloud_reader ────────────────────────────────────────────────
+add_library(unitree_pointcloud_reader STATIC
+    src/unitree/unitree_pointcloud_reader.cpp
+    src/unitree/pointcloud2_decode.cpp
 )
-target_include_directories(lidar_reader PUBLIC include)
-target_link_libraries(lidar_reader PUBLIC unitree_sdk2)
+target_include_directories(unitree_pointcloud_reader PUBLIC include)
+target_link_libraries(unitree_pointcloud_reader PUBLIC unitree_sdk2)
 
 # ─── tests ────────────────────────────────────────────────────────────────────
-add_executable(test_lidar_decode test/test_lidar_decode.cpp)
-target_link_libraries(test_lidar_decode PRIVATE lidar_reader)
+add_executable(test_pointcloud_decode test/test_pointcloud_decode.cpp)
+target_link_libraries(test_pointcloud_decode PRIVATE unitree_pointcloud_reader)
 
-add_executable(test_lidar_reader test/test_lidar_reader.cpp)
-target_link_libraries(test_lidar_reader PRIVATE lidar_reader)
+add_executable(test_unitree_pointcloud_reader test/test_unitree_pointcloud_reader.cpp)
+target_link_libraries(test_unitree_pointcloud_reader PRIVATE unitree_pointcloud_reader)
