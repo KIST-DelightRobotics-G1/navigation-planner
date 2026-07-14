@@ -1,58 +1,51 @@
-# route-planner
+# kist-navigation-planner
 
-LiDAR PointCloud2 → OccupancyGrid → Euclidean Distance Transform (EDT) Costmap → A* path planning, exposed to Python via pybind11.
+C++ navigation planner for the Unitree G1 humanoid robot: LiDAR pointcloud → occupancy grid → costmap → A* path, without ROS2.
 
----
+References (read-only, not imported):
+- `~/route-planner` — original ROS2 pipeline (algorithm reference)
+- `~/kist-gearsonic-inference` — DDS reader pattern (`UnitreeStateReader` family)
 
 ## Architecture
 
-![Architecture](docs/architecture.png)
+[![Architecture](docs/kist-navigation-planner.svg)](docs/kist-navigation-planner.svg)
 
----
+## Dependencies
 
-## Pipeline
-
-`RoutePlannerPipeline` runs as a chain of 6 stages, each on its own thread.
-
-| Stage | Role |
+| Package | Purpose |
 |---|---|
-| T1 PointCloud2Adapter | Subscribes `/bridge/sensors/lidar/points` → `PointCloudXYZFrame` |
-| T2 PointCloudProcessor | Downsample + range filter |
-| T3 PoseAdapter | Subscribes `/bridge/sensors/location` → `PoseXY` |
-| T4 OccupancyGridBuilder | PointCloud + Pose → map-aligned 2D grid |
-| T5 CostmapBuilder | Euclidean Distance Transform (EDT) inflation costmap |
-| T6 AStarPlanner | Goal coordinate → path (`list[tuple[float, float]]`) |
+| `unitree_sdk2` | Unitree G1 DDS client library |
+| `yaml-cpp` | YAML config parser |
 
----
+## Installation
+
+### Clone Repository
+
+```bash
+git clone https://github.com/Safety-Node/kist-navigation-planner.git
+cd kist-navigation-planner
+```
+
+All following steps run from the repository root.
+
+### Install unitree_sdk2
+
+```bash
+git clone https://github.com/unitreerobotics/unitree_sdk2.git thirdparty/unitree_sdk2
+```
+
+### Install yaml-cpp
+
+```bash
+sudo apt install libyaml-cpp-dev
+```
 
 ## Build
 
 ```bash
-sudo apt-get install -y ros-humble-desktop python3-dev pybind11-dev libyaml-cpp-dev
-
-source /opt/ros/humble/setup.bash
-colcon build --packages-select route_planner
+cmake -B build && cmake --build build
 ```
 
-Output: `install/route_planner/lib/python3.10/site-packages/route_planner_py*.so`
+## Run
 
----
-
-## Python API
-
-```python
-import route_planner_py as rp
-
-rp.init([])                      # initialize rclcpp (once per process)
-rp.ok()                          # → bool
-
-pipeline = rp.RoutePlannerPipeline()
-pipeline.start()
-pipeline.set_goal(x, y)          # goal in map frame (meters)
-path = pipeline.get_path()       # → list[tuple[float, float]]
-pipeline.thread_hz()             # → dict[str, float]  per-stage Hz
-pipeline.stop()
-```
-
-Config files default to the `config/` directory. Pass constructor arguments to override paths.
-
+## Usage

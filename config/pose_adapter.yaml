@@ -1,3 +1,0 @@
-pose_adapter_node:
-  ros__parameters:
-    input_topic: "/bridge/sensors/location"

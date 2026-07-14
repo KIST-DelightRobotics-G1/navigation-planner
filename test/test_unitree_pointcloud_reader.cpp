@@ -1,11 +1,16 @@
 // Live LiDAR stream check (robot LAN needed):
-//   ./test_unitree_pointcloud_reader <network_interface> [domain_id] [topic]
-// Prints frame rate, point count, and a sample point once per second.
+//   ./test_unitree_pointcloud_reader [config_path]
+// Everything (interface, domain, topic, processing) comes from
+// config/config.yaml. Prints frame age, point count, and a sample point
+// once per second. Ctrl-C to stop.
 
+#include "common/config.hpp"
+#include "processing/pointcloud_processor.hpp"
 #include "unitree/unitree_pointcloud_reader.hpp"
 
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <csignal>
 #include <cstdio>
 #include <string>
@@ -16,40 +21,57 @@ using namespace kist;
 static std::atomic<bool> g_stop{false};
 
 int main(int argc, char** argv) {
-    if (argc < 2) {
-        std::printf("usage: %s <network_interface> [domain_id] [topic]\n", argv[0]);
-        return 1;
-    }
-    const std::string iface  = argv[1];
-    const int         domain = argc >= 3 ? std::atoi(argv[2]) : 0;
+    const std::string config_path = (argc >= 2) ? argv[1] : "config/config.yaml";
+    Config::instance().load(config_path);
+    const auto& root = Config::instance().root();
+
+    const auto unitree_cfg = root["unitree"];
+    const auto domain_id   = unitree_cfg["domain_id"].as<int>();
+    const auto interface   = unitree_cfg["network_interface"].as<std::string>();
 
     std::signal(SIGINT, [](int) { g_stop = true; });
 
-    auto& reader = UnitreePointcloudReader::instance();
-    bool ok = argc >= 4 ? reader.start(domain, iface, argv[3])
-                        : reader.start(domain, iface);
-    if (!ok)
+    // assembly: processing stage plugged into the reader's receive thread
+    auto& reader = UnitreePointCloudReader::instance();
+    reader.set_processor(
+        [proc = PointCloudProcessor{
+             pointcloud_processor_options_from_yaml(root["pointcloud_processor"])}](
+            UnitreePointCloud& f) { proc.process(f); });
+
+    if (!reader.start(domain_id, interface))
         return 1;
 
-    int64_t last_stamp = -1;
-    int     frames     = 0;
     while (!g_stop) {
         std::this_thread::sleep_for(std::chrono::seconds(1));
-        auto c = reader.cloud_buf.GetDataWithTime();
-        if (!c.HasData()) {
-            std::printf("cloud: <empty> (no frames / stale)\n");
-            frames = 0;
+
+        auto cloud = reader.cloud_buf.GetDataWithTime();
+        if (!cloud.HasData()) {
+            std::printf("no cloud (buffer empty)\n");
             continue;
         }
-        if (c.data->stamp_ns != last_stamp) {
-            last_stamp = c.data->stamp_ns;
-            ++frames;
+
+        const auto& f = *cloud.data;
+        const std::size_t n = f.point_count();
+        std::printf("age=%6.1fms  points=%6zu  frame_id=%s",
+                    cloud.GetAgeMs(), n, f.frame_id.c_str());
+        if (n > 0) {
+            // frame extents — with the processor enabled these must sit
+            // inside the configured filter ranges (z band, min radius)
+            float z_min = f.xyz[2], z_max = f.xyz[2];
+            float r2_min = f.xyz[0] * f.xyz[0] + f.xyz[1] * f.xyz[1];
+            for (std::size_t i = 0; i < f.xyz.size(); i += 3) {
+                const float z  = f.xyz[i + 2];
+                const float r2 = f.xyz[i] * f.xyz[i] + f.xyz[i + 1] * f.xyz[i + 1];
+                if (z < z_min) z_min = z;
+                if (z > z_max) z_max = z;
+                if (r2 < r2_min) r2_min = r2;
+            }
+            const std::size_t mid = (n / 2) * 3;
+            std::printf("  z=[%.2f, %.2f]  r_min=%.2f  sample=(%.2f, %.2f, %.2f)",
+                        z_min, z_max, std::sqrt(r2_min),
+                        f.xyz[mid], f.xyz[mid + 1], f.xyz[mid + 2]);
         }
-        std::printf("frame_id=%s  points=%zu  age=%.0fms  first=(%.2f %.2f %.2f)\n",
-                    c.data->frame_id.c_str(), c.data->point_count(), c.GetAgeMs(),
-                    c.data->empty() ? 0.0 : c.data->xyz[0],
-                    c.data->empty() ? 0.0 : c.data->xyz[1],
-                    c.data->empty() ? 0.0 : c.data->xyz[2]);
+        std::printf("\n");
     }
 
     reader.stop();

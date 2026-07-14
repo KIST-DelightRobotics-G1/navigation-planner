@@ -1,0 +1,38 @@
+# kist-navigation-planner — single config file, one section per stage
+# (same convention as kist-gearsonic-inference's config/config.yaml;
+#  sections are added as stages are implemented)
+
+unitree:
+  # DDS domain id (default 0; change to isolate multiple robots on one network)
+  domain_id: 0
+  # Network interface connected to the robot (e.g. eno1, enp0s31f6)
+  network_interface: eno2
+
+pointcloud_processor:
+  # Runs on the reader's DDS receive thread (set_processor hook):
+  # transform first, then filter on the transformed coordinates.
+  # Starting values taken from route-planner's tuning — re-tune on the G1.
+
+  # sensor frame -> planning frame: axis invert + offset
+  transform:
+    enabled: true
+    offset_x: 0.0
+    offset_y: 0.0
+    offset_z: 1.2     # sensor mount height above ground
+    invert_x: false
+    invert_y: true
+    invert_z: true
+
+  filter:
+    enabled: true
+    enable_x: true    # keep a 20m x 20m working area
+    min_x: -10.0
+    max_x:  10.0
+    enable_y: true
+    min_y: -10.0
+    max_y:  10.0
+    enable_z: true    # keep the obstacle band, drop floor and ceiling
+    min_z:  0.3
+    max_z:  1.5
+    enable_radius: true
+    min_radius: 0.5   # drop robot-body returns around the origin (XY)

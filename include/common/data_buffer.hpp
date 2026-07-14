@@ -1,7 +1,12 @@
 #pragma once
 
-#include <memory>
+// Shared-state buffer, same contract as kist-gearsonic-inference's
+// common/data_buffer.hpp: writers overwrite the latest value, readers
+// take a cheap shared_ptr snapshot from any thread. An empty buffer
+// means "no live data" (watchdogs Clear() stale streams).
+
 #include <chrono>
+#include <memory>
 #include <mutex>
 #include <shared_mutex>
 
