@@ -1,4 +1,4 @@
-#include "processing/pointcloud_processor.hpp"
+#include "pointcloud/pointcloud_processor.hpp"
 
 #include <yaml-cpp/yaml.h>
 

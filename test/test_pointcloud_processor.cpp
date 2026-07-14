@@ -5,7 +5,7 @@
 // compaction, metadata passthrough, option validation, and YAML parsing
 // (full section, partial section, absent section).
 
-#include "processing/pointcloud_processor.hpp"
+#include "pointcloud/pointcloud_processor.hpp"
 
 #include <yaml-cpp/yaml.h>
 

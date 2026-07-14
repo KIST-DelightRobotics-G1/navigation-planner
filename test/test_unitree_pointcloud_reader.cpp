@@ -5,7 +5,7 @@
 // once per second. Ctrl-C to stop.
 
 #include "common/config.hpp"
-#include "processing/pointcloud_processor.hpp"
+#include "pointcloud/pointcloud_processor.hpp"
 #include "unitree/unitree_pointcloud_reader.hpp"
 
 #include <atomic>
