@@ -8,6 +8,36 @@ unitree:
   # Network interface connected to the robot (e.g. eno1, enp0s31f6)
   network_interface: eno2
 
+pose_filter:
+  # UWB + odometry EKF fusion (UwbOdomAEKF). Output frame + filter tuning.
+  # Every key is optional — omitted keys fall back to the defaults below,
+  # which match the onboard reference. Re-tune on the G1.
+  frame_id: map
+
+  # Safety: gate the pose off if no fresh UWB fix arrives within this window
+  # (ms). Short between-fix gaps are normal EKF coasting; this catches a real
+  # UWB outage. 0 disables. Matches the UWB subscriber's stale cadence.
+  uwb_timeout_ms: 1000
+
+  # Process noise (Q)
+  q_xy_m2_per_m: 0.001          # x/y process noise (m^2 per m travelled)
+  q_bias_rad2_per_step: 1.0e-9  # yaw-bias random walk per step
+
+  # Initial covariance (P)
+  p_init_xy_m2: 1.0
+  p_init_bias_rad2: 9.8696044   # pi^2 — yaw bias fully unknown at init
+
+  # Adaptive measurement noise R (Sage-Husa)
+  r_init_m2: 0.25
+  r_min_m2: 0.002
+  r_max_m2: 25.0
+  forget_b: 0.98
+  warmup_steps: 20
+
+  # Yaw-bias std (deg) below which the pose is considered calibrated and
+  # starts publishing.
+  bias_calibrated_std_deg: 5.0
+
 pointcloud_processor:
   # Runs on the reader's DDS receive thread (set_processor hook):
   # transform first, then filter on the transformed coordinates.

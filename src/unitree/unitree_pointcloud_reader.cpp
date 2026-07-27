@@ -120,7 +120,7 @@ void UnitreePointCloudReader::on_cloud_update(const void* message) {
 
     UnitreePointCloud frame;
     if (!decode_pointcloud2(msg, frame)) {
-        std::cerr << "[UnitreePointCloudReader] cloud without FLOAT32 x/y/z fields — dropped\n";
+        std::cerr << "[UnitreePointCloudReader] cloud without FLOAT32 x/y/z fields - dropped\n";
         return;
     }
     if (process_)
@@ -140,7 +140,7 @@ void UnitreePointCloudReader::watchdog_loop() {
 
         auto cloud = cloud_buf.GetDataWithTime();
         if (cloud.HasData() && cloud.GetAgeMs() > stale_ms) {
-            std::cerr << "[UnitreePointCloudReader] cloud stale — cleared\n";
+            std::cerr << "[UnitreePointCloudReader] cloud stale - cleared\n";
             cloud_buf.Clear();
         }
     }

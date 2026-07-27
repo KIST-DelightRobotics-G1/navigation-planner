@@ -98,7 +98,7 @@ void UnitreeOdometryReader::watchdog_loop() {
 
         auto odom = odom_buf.GetDataWithTime();
         if (odom.HasData() && odom.GetAgeMs() > stale_ms) {
-            std::cerr << "[UnitreeOdometryReader] odometry stale — cleared\n";
+            std::cerr << "[UnitreeOdometryReader] odometry stale - cleared\n";
             odom_buf.Clear();
         }
     }

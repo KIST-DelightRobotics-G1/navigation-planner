@@ -28,6 +28,8 @@ inline constexpr const char* kDefaultOdomTopic = "rt/dog_odom";
 // subscribe pattern as UnitreePointCloudReader / gearsonic's
 // UnitreeStateReader. Fixed-size payload, so the SDK→kist conversion is
 // internal (gearsonic convert() style); there is no processor hook.
+// Consumers pull odom_buf (e.g. PoseFilter's thread), keeping the reader a
+// pure transport layer.
 //
 // The watchdog clears the buffer when samples stop arriving; consumers
 // key off "has data" (empty-buffer principle).
