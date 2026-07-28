@@ -84,19 +84,22 @@ target_link_libraries(tensorrt_inference PUBLIC
 )
 set_target_properties(tensorrt_inference PROPERTIES CXX_STANDARD 20)
 
-# ─── yolo_seg ─────────────────────────────────────────────────────────────────
-# YOLO26-seg inference stage: letterbox preprocess -> TRT (tensorrt_inference)
-# -> NMS-free postprocess -> instance masks. C++20 (pulls the TRT engine header).
-add_library(yolo_seg STATIC
-    src/segmentation/yolo_seg_engine.cpp
+# ─── segmentation ─────────────────────────────────────────────────────────────
+# CV segmentation stage. yolo/YoloSegEngine (Module): letterbox preprocess ->
+# TRT (tensorrt_inference) -> NMS-free postprocess -> instance masks. SegInference
+# (Thread): runs the engine on a worker thread from an injected frame source and
+# publishes DataBuffer<SegResult>. C++20 (pulls the TRT engine header).
+add_library(segmentation STATIC
+    src/segmentation/yolo/yolo_seg_engine.cpp
+    src/segmentation/segment_inference.cpp
 )
-target_include_directories(yolo_seg PUBLIC include ${OpenCV_INCLUDE_DIRS})
-target_link_libraries(yolo_seg PUBLIC tensorrt_inference ${OpenCV_LIBS})
-set_target_properties(yolo_seg PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
+target_include_directories(segmentation PUBLIC include ${OpenCV_INCLUDE_DIRS})
+target_link_libraries(segmentation PUBLIC tensorrt_inference ${OpenCV_LIBS})
+set_target_properties(segmentation PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
 
 # Static-image seg check — the model goes in models/ (yolo26l-seg.onnx).
 add_executable(test_yolo_seg test/test_yolo_seg.cpp)
-target_link_libraries(test_yolo_seg PRIVATE yolo_seg)
+target_link_libraries(test_yolo_seg PRIVATE segmentation)
 set_target_properties(test_yolo_seg PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
 
 # ─── tests ────────────────────────────────────────────────────────────────────
@@ -145,6 +148,19 @@ if(EXISTS "${KIST_EXT_SENSOR_IO}/CMakeLists.txt")
         target_include_directories(test_pose_filter_viewer PRIVATE ${OpenCV_INCLUDE_DIRS})
     else()
         message(STATUS "OpenCV not found — skipping test_pose_filter_viewer")
+    endif()
+
+    # Live camera segmentation: RealsenseReceiver (H.264 color, embedded) ->
+    # YoloSegEngine -> OpenCV mask overlay. ext's realsense_receiver only exists
+    # when its Rx deps (libav + idlc) are present — i.e. the Docker image.
+    if(TARGET realsense_receiver AND OpenCV_FOUND)
+        add_executable(test_seg_camera test/test_seg_camera.cpp)
+        target_link_libraries(test_seg_camera
+            PRIVATE segmentation realsense_receiver yaml-cpp ${OpenCV_LIBS})
+        set_target_properties(test_seg_camera PROPERTIES
+            CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
+    else()
+        message(STATUS "realsense_receiver/OpenCV missing — skipping test_seg_camera")
     endif()
 
     message(STATUS "UWB input enabled via ${KIST_EXT_SENSOR_IO}")

@@ -1,4 +1,4 @@
-#include "segmentation/yolo_seg_engine.hpp"
+#include "segmentation/yolo/yolo_seg_engine.hpp"
 
 #include <opencv2/dnn.hpp>
 #include <opencv2/imgproc.hpp>

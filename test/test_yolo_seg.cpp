@@ -6,7 +6,7 @@
 //
 // First run builds+caches the .trt engine (slow, ~1min); later runs load it.
 
-#include "segmentation/yolo_seg_engine.hpp"
+#include "segmentation/yolo/yolo_seg_engine.hpp"
 
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>

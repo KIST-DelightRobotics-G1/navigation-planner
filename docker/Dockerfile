@@ -40,8 +40,39 @@ ARG UNITREE_SDK2_COMMIT=21d0a3b2c46ee48c8fdf2783becb6be3beb0a59b
 RUN git clone https://github.com/unitreerobotics/unitree_sdk2.git thirdparty/unitree_sdk2 && \
     git -C thirdparty/unitree_sdk2 checkout "${UNITREE_SDK2_COMMIT}"
 
+# ─── camera-receive deps (embedding ext-sensor-io's RealsenseReceiver) ────────
+# The live-camera seg stage embeds RealsenseReceiver from ext-sensor-io. Its Rx
+# build needs libav (H.264 color decode) + the idlc toolchain (CycloneDDS-CXX
+# 0.10.2, for the kist_idl custom DDS types — NOT librealsense/x264, those are
+# Tx-only). ext-sensor-io itself is a private repo, so it is mounted at run time
+# as the sibling ../kist-ext-sensor-io (see run.sh), not cloned here.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libavcodec-dev libavutil-dev libswscale-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# idlc + idlcxx pinned to 0.10.2 (matches unitree_sdk2's bundled libddscxx), in
+# /opt so it never shadows the SDK's runtime libs — only the build tools are used.
+ARG CYCLONEDDS_VERSION=0.10.2
+RUN git clone --depth 1 --branch "${CYCLONEDDS_VERSION}" \
+        https://github.com/eclipse-cyclonedds/cyclonedds.git /tmp/cyclonedds && \
+    cmake -S /tmp/cyclonedds -B /tmp/cyclonedds/build \
+        -DCMAKE_INSTALL_PREFIX=/opt/cyclonedds \
+        -DBUILD_IDLC=ON -DCMAKE_BUILD_TYPE=Release && \
+    cmake --build /tmp/cyclonedds/build --target install -j "$(nproc)" && \
+    git clone --depth 1 --branch "${CYCLONEDDS_VERSION}" \
+        https://github.com/eclipse-cyclonedds/cyclonedds-cxx.git /tmp/cyclonedds-cxx && \
+    cmake -S /tmp/cyclonedds-cxx -B /tmp/cyclonedds-cxx/build \
+        -DCMAKE_INSTALL_PREFIX=/opt/cyclonedds \
+        -DCMAKE_PREFIX_PATH=/opt/cyclonedds -DCMAKE_BUILD_TYPE=Release && \
+    cmake --build /tmp/cyclonedds-cxx/build --target install -j "$(nproc)" && \
+    rm -rf /tmp/cyclonedds /tmp/cyclonedds-cxx
+ENV PATH=/opt/cyclonedds/bin:${PATH}
+ENV CYCLONEDDS_HOME=/opt/cyclonedds
+
 # ─── source + build ───────────────────────────────────────────────────────────
 # Build context = repo root (minus build/, .git, the SDK via .dockerignore).
+# The camera stage (ext-sensor-io mount) is absent at image-build time, so it is
+# skipped here and built in-container after run.sh mounts the sibling repo.
 COPY . .
 RUN cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j"$(nproc)"
 

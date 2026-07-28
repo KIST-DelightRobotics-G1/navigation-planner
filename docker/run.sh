@@ -28,6 +28,15 @@ set -e
 CONTAINER=kist-navigation-planner
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+# The live-camera seg stage embeds ext-sensor-io's RealsenseReceiver. When the
+# sibling repo is checked out next to this one, mount it as the container-side
+# sibling so the CMake ext block finds it at ../kist-ext-sensor-io.
+EXT_DIR="$(cd "${REPO_DIR}/.." && pwd)/kist-ext-sensor-io"
+EXT_MOUNT=()
+if [ -d "${EXT_DIR}" ]; then
+    EXT_MOUNT=(-v "${EXT_DIR}:/workspace/kist-ext-sensor-io")
+fi
+
 if [ "$(docker ps -q -f name=^${CONTAINER}$)" ]; then
     docker exec -it "${CONTAINER}" /bin/bash
 elif [ "$(docker ps -aq -f name=^${CONTAINER}$)" ]; then
@@ -41,6 +50,7 @@ else
         -e DISPLAY="${DISPLAY}" \
         -v /tmp/.X11-unix:/tmp/.X11-unix \
         -v "${REPO_DIR}":/workspace/kist-navigation-planner \
+        "${EXT_MOUNT[@]}" \
         -w /workspace/kist-navigation-planner \
         kist-navigation-planner
 fi
