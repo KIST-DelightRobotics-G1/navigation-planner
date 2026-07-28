@@ -1,5 +1,9 @@
 # Model weights live outside git (large, regenerable via `yolo export`).
 *.onnx
+# Local test images (e.g. ultralytics samples) — bring your own.
+*.jpg
+*.jpeg
+*.png
 # Built TensorRT engines are device/version-specific — never commit them;
 # they are rebuilt from the .onnx on first run (ConvertONNXToTRT).
 *.trt

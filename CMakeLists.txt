@@ -7,6 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(yaml-cpp REQUIRED)
 find_package(Eigen3 REQUIRED)       # header-only; EKF linear algebra
 find_package(CUDAToolkit REQUIRED)  # CV inference (TensorRT backend)
+find_package(OpenCV REQUIRED)       # CV inference pre/post + visual runners
 
 # ─── thirdparty: unitree_sdk2 ─────────────────────────────────────────────────
 # Guarded so an embedding super-project that already provides the target
@@ -82,6 +83,21 @@ target_link_libraries(tensorrt_inference PUBLIC
     nvonnxparser
 )
 set_target_properties(tensorrt_inference PROPERTIES CXX_STANDARD 20)
+
+# ─── yolo_seg ─────────────────────────────────────────────────────────────────
+# YOLO26-seg inference stage: letterbox preprocess -> TRT (tensorrt_inference)
+# -> NMS-free postprocess -> instance masks. C++20 (pulls the TRT engine header).
+add_library(yolo_seg STATIC
+    src/segmentation/yolo_seg_engine.cpp
+)
+target_include_directories(yolo_seg PUBLIC include ${OpenCV_INCLUDE_DIRS})
+target_link_libraries(yolo_seg PUBLIC tensorrt_inference ${OpenCV_LIBS})
+set_target_properties(yolo_seg PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
+
+# Static-image seg check — the model goes in models/ (yolo26l-seg.onnx).
+add_executable(test_yolo_seg test/test_yolo_seg.cpp)
+target_link_libraries(test_yolo_seg PRIVATE yolo_seg)
+set_target_properties(test_yolo_seg PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
 
 # ─── tests ────────────────────────────────────────────────────────────────────
 # Live runners only — they subscribe to the robot's DDS streams. The pose_filter
