@@ -1,0 +1,9 @@
+# unitree_sdk2 is cloned (pinned) inside the image — don't COPY the host copy
+# over the clone.
+thirdparty/unitree_sdk2/
+
+# build outputs / VCS / device-specific artifacts
+build/
+.git/
+models/*.trt
+models/*.engine

@@ -5,7 +5,8 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(yaml-cpp REQUIRED)
-find_package(Eigen3 REQUIRED)  # header-only; EKF linear algebra
+find_package(Eigen3 REQUIRED)       # header-only; EKF linear algebra
+find_package(CUDAToolkit REQUIRED)  # CV inference (TensorRT backend)
 
 # ─── thirdparty: unitree_sdk2 ─────────────────────────────────────────────────
 # Guarded so an embedding super-project that already provides the target
@@ -55,6 +56,32 @@ add_library(pose_filter STATIC
 )
 target_include_directories(pose_filter PUBLIC include)
 target_link_libraries(pose_filter PUBLIC Eigen3::Eigen yaml-cpp)
+
+# ─── tensorrt_inference ───────────────────────────────────────────────────────
+# Generic ONNX->TensorRT engine backend (build + cache + execute), vendored
+# as-is from kist-gearsonic-inference — reused for the CV segmentation model
+# (model-agnostic named multi-I/O, so YOLO-seg's 1-in/2-out fits). Same CMake
+# as upstream: unconditional, C++20, links nvinfer/nvonnxparser by name.
+#
+# The code targets TensorRT 10.7 (nvcr.io/nvidia/tensorrt:24.12-py3, matching
+# the Jetson JetPack 6 target) — build it in that container, like gearsonic and
+# ext-sensor-io. A host with a different TRT will fail to compile here (by
+# design: a loud "wrong toolchain, use the Docker" error, not a silent skip).
+add_library(tensorrt_inference STATIC
+    src/tensorrt/InferenceEngine.cpp
+)
+target_include_directories(tensorrt_inference PUBLIC
+    include
+)
+target_include_directories(tensorrt_inference PRIVATE
+    thirdparty/picosha2
+)
+target_link_libraries(tensorrt_inference PUBLIC
+    CUDA::cudart
+    nvinfer
+    nvonnxparser
+)
+set_target_properties(tensorrt_inference PROPERTIES CXX_STANDARD 20)
 
 # ─── tests ────────────────────────────────────────────────────────────────────
 # Live runners only — they subscribe to the robot's DDS streams. The pose_filter
