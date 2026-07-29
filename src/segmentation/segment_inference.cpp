@@ -42,6 +42,7 @@ void SegInference::run() {
         if (source_ && source_(bgr, stamp) && stamp != last_stamp_ && !bgr.empty()) {
             last_stamp_ = stamp;
             result_buf.SetData(engine_.infer(bgr, stamp));
+            processed_.fetch_add(1, std::memory_order_relaxed);
         }
 
         // Pace to the target rate (drop the wait if inference already overran).

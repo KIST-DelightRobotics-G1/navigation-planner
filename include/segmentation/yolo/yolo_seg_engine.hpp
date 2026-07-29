@@ -5,6 +5,7 @@
 
 #include <opencv2/core.hpp>
 
+#include <atomic>
 #include <cstdint>
 #include <string>
 
@@ -12,6 +13,15 @@
 typedef struct CUstream_st* cudaStream_t;
 
 namespace kist {
+
+// Per-stage wall-clock cost of the last infer() call (ms). Diagnostic only —
+// lets a runner see whether a frame is preprocess-, GPU-, or postprocess-bound.
+// `infer` covers the whole H2D + enqueue + D2H block up to the stream sync.
+struct SegTimings {
+    double preprocess_ms  = 0.0;
+    double infer_ms       = 0.0;
+    double postprocess_ms = 0.0;
+};
 
 struct YoloSegConfig {
     std::string onnx_path = "models/yolo26l-seg.onnx";
@@ -52,6 +62,14 @@ public:
 
     bool initialized() const { return initialized_; }
 
+    // Per-stage cost of the most recent infer() (ms). Cheap to poll from
+    // another thread; values are a single-frame snapshot, not smoothed.
+    SegTimings timings() const {
+        return { pre_ms_.load(std::memory_order_relaxed),
+                 inf_ms_.load(std::memory_order_relaxed),
+                 post_ms_.load(std::memory_order_relaxed) };
+    }
+
 private:
     YoloSegConfig      cfg_;
     TRTInferenceEngine engine_;
@@ -64,6 +82,12 @@ private:
     TPinnedVector<float> input_buf_;
     TPinnedVector<float> det_buf_;
     TPinnedVector<float> proto_buf_;
+
+    // Reused across frames so the hot path allocates nothing (per-frame malloc
+    // of the ~11MB blob was the source of the preprocess-time spikes).
+    cv::Mat resized_, canvas_, blob_;
+
+    std::atomic<double> pre_ms_{0.0}, inf_ms_{0.0}, post_ms_{0.0};
 
     bool initialized_ = false;
 };

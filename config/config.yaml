@@ -6,7 +6,7 @@ unitree:
   # DDS domain id (default 0; change to isolate multiple robots on one network)
   domain_id: 0
   # Network interface connected to the robot (e.g. eno1, enp0s31f6)
-  network_interface: eno2
+  network_interface: lo
 
 pose_filter:
   # UWB + odometry EKF fusion (UwbOdomAEKF). Output frame + filter tuning.
@@ -38,6 +38,14 @@ pose_filter:
   # starts publishing.
   bias_calibrated_std_deg: 5.0
 
+segmentation:
+  # YOLO26-seg camera inference. Reads the camera whose Tx publishes under this
+  # name (rt/kist/camera/<camera>/...).
+  camera: head
+  # Worker inference-rate cap (fps). 0 (or negative) = no cap: run as fast as
+  # the GPU allows. Positive values throttle the seg thread to that rate.
+  target_fps: 30
+
 pointcloud_processor:
   # Runs on the reader's DDS receive thread (set_processor hook):
   # transform first, then filter on the transformed coordinates.
@@ -65,4 +73,4 @@ pointcloud_processor:
     min_z:  0.3
     max_z:  1.5
     enable_radius: true
-    min_radius: 0.5   # drop robot-body returns around the origin (XY)
+    min_radius: 0.5   # drop robot-body returns around the origin (XY

@@ -20,6 +20,7 @@
 #include <atomic>
 #include <chrono>
 #include <csignal>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <string>
@@ -54,8 +55,22 @@ cv::Scalar color_for(int id) {
 void draw(cv::Mat& vis, const cv::Mat& base, const SegResult& r) {
     for (const auto& d : r.detections) {
         const cv::Scalar col = color_for(d.class_id);
-        cv::Mat colored(base.size(), CV_8UC3, col);
-        colored.copyTo(vis, d.mask);
+        cv::Rect box = d.box & cv::Rect(0, 0, vis.cols, vis.rows);
+        if (box.width > 0 && box.height > 0 && !d.mask.empty()) {
+            // Masks are at proto resolution: map the box into mask space, then
+            // upsample just that sub-region to the box for the overlay.
+            const cv::Point2f m0 = r.orig_to_mask(box.x, box.y);
+            const cv::Point2f m1 = r.orig_to_mask(box.x + box.width, box.y + box.height);
+            cv::Rect mrect(cvFloor(m0.x), cvFloor(m0.y),
+                           cvCeil(m1.x - m0.x), cvCeil(m1.y - m0.y));
+            mrect &= cv::Rect(0, 0, d.mask.cols, d.mask.rows);
+            if (mrect.width > 0 && mrect.height > 0) {
+                cv::Mat mbox;
+                cv::resize(d.mask(mrect), mbox, box.size(), 0, 0, cv::INTER_NEAREST);
+                cv::Mat colored(box.size(), CV_8UC3, col);
+                colored.copyTo(vis(box), mbox);
+            }
+        }
         cv::rectangle(vis, d.box, col, 2);
         char label[64];
         std::snprintf(label, sizeof label, "%s %.2f", name_of(d.class_id), d.score);
@@ -105,9 +120,10 @@ int main(int argc, char** argv) {
                 domain_id, interface.c_str(), target_fps,
                 has_disp ? "window (ESC to quit)" : "headless -> /tmp/seg_camera_out.png");
 
-    int64_t last_result_stamp = -1;
-    int     seg_frames = 0, dets = 0;
-    auto    log_window = std::chrono::steady_clock::now();
+    int64_t  last_result_stamp = -1;
+    uint64_t last_processed    = 0;      // seg.frames_processed() at last window
+    int      dets = 0, sampled = 0;      // det/frame averaged over sampled results
+    auto     log_window = std::chrono::steady_clock::now();
 
     while (!g_stop) {
         auto cf  = rx.color().GetData();
@@ -131,18 +147,27 @@ int main(int argc, char** argv) {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
 
-        // Count segmentation throughput (distinct result stamps).
+        // Sample detections per distinct result (for the det/frame average).
+        // Throughput itself comes from the worker's produce-site counter below,
+        // not this display-loop poll — so fps is exact regardless of cadence.
         if (res && res->stamp_ns != last_result_stamp) {
             last_result_stamp = res->stamp_ns;
-            ++seg_frames;
             dets += int(res->detections.size());
+            ++sampled;
         }
         const auto now = std::chrono::steady_clock::now();
         if (now - log_window >= std::chrono::seconds(1)) {
             log_window = now;
-            std::printf("seg %2d fps  %d det/frame avg  %s\n", seg_frames,
-                        seg_frames ? dets / seg_frames : 0, cf ? "" : "(no camera)");
-            seg_frames = 0; dets = 0;
+            const uint64_t processed = seg.frames_processed();
+            const auto t = seg.timings();
+            std::printf("seg %2llu fps  %d det/frame avg  "
+                        "[pre %.1f  infer %.1f  post %.1f ms]  %s\n",
+                        (unsigned long long)(processed - last_processed),
+                        sampled ? dets / sampled : 0,
+                        t.preprocess_ms, t.infer_ms, t.postprocess_ms,
+                        cf ? "" : "(no camera)");
+            last_processed = processed;
+            dets = 0; sampled = 0;
         }
     }
 

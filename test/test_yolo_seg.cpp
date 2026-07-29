@@ -76,8 +76,22 @@ int main(int argc, char** argv) {
     cv::Mat vis = img.clone();
     for (const auto& d : r.detections) {
         const cv::Scalar col = color_for(d.class_id);
-        cv::Mat colored(img.size(), CV_8UC3, col);
-        colored.copyTo(vis, d.mask);                       // fill mask region
+        cv::Rect box = d.box & cv::Rect(0, 0, vis.cols, vis.rows);
+        if (box.width > 0 && box.height > 0 && !d.mask.empty()) {
+            // Masks are at proto resolution: map the box into mask space, then
+            // upsample just that sub-region to the box for the overlay.
+            const cv::Point2f m0 = r.orig_to_mask(box.x, box.y);
+            const cv::Point2f m1 = r.orig_to_mask(box.x + box.width, box.y + box.height);
+            cv::Rect mrect(cvFloor(m0.x), cvFloor(m0.y),
+                           cvCeil(m1.x - m0.x), cvCeil(m1.y - m0.y));
+            mrect &= cv::Rect(0, 0, d.mask.cols, d.mask.rows);
+            if (mrect.width > 0 && mrect.height > 0) {
+                cv::Mat mbox;
+                cv::resize(d.mask(mrect), mbox, box.size(), 0, 0, cv::INTER_NEAREST);
+                cv::Mat colored(box.size(), CV_8UC3, col);
+                colored.copyTo(vis(box), mbox);
+            }
+        }
         cv::rectangle(vis, d.box, col, 2);
         char label[64];
         std::snprintf(label, sizeof label, "%s %.2f", name_of(d.class_id), d.score);

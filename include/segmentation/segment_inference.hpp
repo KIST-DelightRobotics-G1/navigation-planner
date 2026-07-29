@@ -55,6 +55,16 @@ public:
 
     bool initialized() const { return engine_.initialized(); }
 
+    // Monotonic count of frames inferred (published to result_buf). Poll the
+    // delta over a window for a produce-site-accurate inference rate — the
+    // consumer number for the Tx→Rx→seg fps comparison, free of the poll-
+    // cadence artifact a display-loop stamp counter would have.
+    uint64_t frames_processed() const { return processed_.load(std::memory_order_relaxed); }
+
+    // Per-stage cost of the engine's most recent inference (ms) — diagnostic,
+    // to see whether a frame is preprocess-, GPU-, or postprocess-bound.
+    SegTimings timings() const { return engine_.timings(); }
+
     // ── output: latest segmentation result (empty until the first frame) ──
     DataBuffer<SegResult> result_buf;
 
@@ -66,8 +76,9 @@ private:
     double        period_ms_  = 100.0;   // 1000 / target_fps
     int64_t       last_stamp_ = -1;
 
-    std::thread       thread_;
-    std::atomic<bool> running_{false};
+    std::thread           thread_;
+    std::atomic<bool>     running_{false};
+    std::atomic<uint64_t> processed_{0};
 };
 
 } // namespace kist
