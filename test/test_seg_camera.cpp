@@ -76,14 +76,16 @@ int main(int argc, char** argv) {
     const std::string interface = unitree_cfg["network_interface"].as<std::string>();
 
     YoloSegConfig scfg;
-    double target_fps = 10.0;
+    double      target_fps = 10.0;
+    std::string cam_name   = "head";   // which camera's topics to segment
     if (const auto sc = Config::instance().root()["segmentation"]) {
         scfg.onnx_path = sc["onnx_path"].as<std::string>(scfg.onnx_path);
         target_fps     = sc["target_fps"].as<double>(target_fps);
+        cam_name       = sc["camera"].as<std::string>(cam_name);
     }
 
     RealsenseReceiver rx;
-    if (!rx.start(domain_id, interface)) return 1;
+    if (!rx.start(domain_id, interface, cam_name)) return 1;
 
     SegInference seg;
     if (!seg.init(scfg, target_fps)) return 1;
