@@ -1,8 +1,8 @@
 // Live camera segmentation (robot LAN + RealSense transmitter running):
 //   ./test_seg_camera [config_path]        (default config/config.yaml)
-// Wires the embedded RealsenseReceiver (H.264 color over DDS) into SegInference,
-// which runs YOLO26-seg on its own worker thread (~10 fps cap, latest-wins), and
-// overlays the latest masks on the live video. With a DISPLAY it opens a window
+// Wires the embedded RealsenseReceiver (H.264 color over DDS) into CvInference,
+// which runs YOLO26-seg on its own worker thread (latest-wins), and overlays the
+// latest masks on the live video. With a DISPLAY it opens a window
 // (ESC to quit); headless it writes /tmp/seg_camera_out.png. Detection rate is
 // logged once per second.
 //
@@ -10,7 +10,7 @@
 // on the robot; free the device first with scripts/free_camera.sh). First run
 // builds+caches the .trt engine.
 
-#include "segmentation/segment_inference.hpp"
+#include "cv/cv_inference.hpp"
 #include "system/realsense_receiver.hpp"   // embedded from kist-ext-sensor-io
 #include "common/config.hpp"
 
@@ -90,28 +90,30 @@ int main(int argc, char** argv) {
     const int         domain_id = unitree_cfg["domain_id"].as<int>();
     const std::string interface = unitree_cfg["network_interface"].as<std::string>();
 
-    YoloSegConfig scfg;
-    double      target_fps = 10.0;
-    std::string cam_name   = "head";   // which camera's topics to segment
+    CvInferenceConfig ccfg;
+    ccfg.seg_target_fps = 10.0;
+    std::string cam_name = "head";   // which camera's topics to segment
     if (const auto sc = Config::instance().root()["segmentation"]) {
-        scfg.onnx_path = sc["onnx_path"].as<std::string>(scfg.onnx_path);
-        target_fps     = sc["target_fps"].as<double>(target_fps);
-        cam_name       = sc["camera"].as<std::string>(cam_name);
+        ccfg.seg.onnx_path  = sc["onnx_path"].as<std::string>(ccfg.seg.onnx_path);
+        ccfg.seg_target_fps = sc["target_fps"].as<double>(ccfg.seg_target_fps);
+        cam_name            = sc["camera"].as<std::string>(cam_name);
     }
+    const double target_fps = ccfg.seg_target_fps;
 
     RealsenseReceiver rx;
     if (!rx.start(domain_id, interface, cam_name)) return 1;
 
-    SegInference seg;
-    if (!seg.init(scfg, target_fps)) return 1;
-    seg.start([&](cv::Mat& bgr, int64_t& stamp) -> bool {
+    // main only wires the frame source + start/stop; CvInference owns the
+    // YOLO pipeline and its worker thread.
+    CvInference cvi;
+    if (!cvi.start(ccfg, [&](cv::Mat& bgr, int64_t& stamp) -> bool {
         auto cf = rx.color().GetData();
         if (!cf || cf->empty()) return false;
         stamp = cf->stamp_ns;
         cv::Mat(cf->height, cf->width, CV_8UC3,
                 const_cast<uint8_t*>(cf->data.data()), cf->stride_bytes).copyTo(bgr);
         return true;
-    });
+    })) return 1;
 
     std::signal(SIGINT,  [](int) { g_stop = true; });
     std::signal(SIGTERM, [](int) { g_stop = true; });
@@ -127,7 +129,7 @@ int main(int argc, char** argv) {
 
     while (!g_stop) {
         auto cf  = rx.color().GetData();
-        auto res = seg.result_buf.GetData();
+        auto res = cvi.seg_result().GetData();
 
         if (cf && !cf->empty()) {
             cv::Mat bgr(cf->height, cf->width, CV_8UC3,
@@ -158,8 +160,8 @@ int main(int argc, char** argv) {
         const auto now = std::chrono::steady_clock::now();
         if (now - log_window >= std::chrono::seconds(1)) {
             log_window = now;
-            const uint64_t processed = seg.frames_processed();
-            const auto t = seg.timings();
+            const uint64_t processed = cvi.seg_frames_processed();
+            const auto t = cvi.seg_timings();
             std::printf("seg %2llu fps  %d det/frame avg  "
                         "[pre %.1f  infer %.1f  post %.1f ms]  %s\n",
                         (unsigned long long)(processed - last_processed),
@@ -171,7 +173,7 @@ int main(int argc, char** argv) {
         }
     }
 
-    seg.stop();
+    cvi.stop();
     rx.stop();
     return 0;
 }

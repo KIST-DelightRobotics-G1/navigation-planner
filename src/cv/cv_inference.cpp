@@ -1,4 +1,4 @@
-#include "segmentation/segment_inference.hpp"
+#include "cv/cv_inference.hpp"
 
 #include <pthread.h>
 
@@ -7,30 +7,24 @@
 
 namespace kist {
 
-SegInference::~SegInference() { stop(); }
-
-bool SegInference::init(const YoloSegConfig& cfg, double target_fps) {
-    period_ms_ = (target_fps > 0.0) ? (1000.0 / target_fps) : 0.0;
-    return engine_.init(cfg);
-}
-
-bool SegInference::start(FrameSource source) {
+bool CvInference::start(const CvInferenceConfig& cfg, FrameSource source) {
     if (running_) return true;
-    if (!engine_.initialized()) return false;
-    source_  = std::move(source);
-    running_ = true;
-    thread_  = std::thread(&SegInference::run, this);
+    if (!seg_engine_.init(cfg.seg)) return false;
+    period_ms_ = (cfg.seg_target_fps > 0.0) ? (1000.0 / cfg.seg_target_fps) : 0.0;
+    source_    = std::move(source);
+    running_   = true;
+    thread_    = std::thread(&CvInference::run, this);
     return true;
 }
 
-void SegInference::stop() {
+void CvInference::stop() {
     running_ = false;
     if (thread_.joinable())
         thread_.join();
 }
 
-void SegInference::run() {
-    pthread_setname_np(pthread_self(), "seg-infer");
+void CvInference::run() {
+    pthread_setname_np(pthread_self(), "cv-infer");
     using clock = std::chrono::steady_clock;
 
     while (running_) {
@@ -41,7 +35,7 @@ void SegInference::run() {
         // Latest-wins: process only a new frame, skip stale/duplicate stamps.
         if (source_ && source_(bgr, stamp) && stamp != last_stamp_ && !bgr.empty()) {
             last_stamp_ = stamp;
-            result_buf.SetData(engine_.infer(bgr, stamp));
+            seg_result_.SetData(seg_engine_.infer(bgr, stamp));
             processed_.fetch_add(1, std::memory_order_relaxed);
         }
 

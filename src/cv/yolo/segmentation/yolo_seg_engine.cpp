@@ -1,0 +1,80 @@
+#include "cv/yolo/segmentation/yolo_seg_engine.hpp"
+
+#include "cv/yolo/segmentation/yolo_seg_postprocess.hpp"
+
+#include <chrono>
+#include <iostream>
+
+namespace kist {
+
+bool YoloSegEngine::init(const YoloSegConfig& cfg) {
+    cfg_ = cfg;
+
+    if (!infer_.init(cfg_.onnx_path)) {
+        std::cerr << "[YoloSegEngine] inference init failed: " << cfg_.onnx_path << "\n";
+        return false;
+    }
+
+    // Resolve shapes from the engine (don't hardcode).
+    auto in_s    = infer_.tensor_shape(cfg_.input_name);   // [1, 3, H, W]
+    auto det_s   = infer_.tensor_shape(cfg_.det_name);     // [1, N, S]
+    auto proto_s = infer_.tensor_shape(cfg_.proto_name);   // [1, C, ph, pw]
+    if (in_s.size() != 4 || det_s.size() != 3 || proto_s.size() != 4) {
+        std::cerr << "[YoloSegEngine] unexpected tensor ranks (in=" << in_s.size()
+                  << " det=" << det_s.size() << " proto=" << proto_s.size() << ")\n";
+        return false;
+    }
+    input_h_    = in_s[2];    input_w_    = in_s[3];
+    det_count_  = det_s[1];   det_stride_ = det_s[2];
+    proto_c_    = proto_s[1]; proto_h_    = proto_s[2]; proto_w_ = proto_s[3];
+
+    input_buf_.resize(static_cast<size_t>(3) * input_h_ * input_w_);
+    det_buf_.resize(static_cast<size_t>(det_count_) * det_stride_);
+    proto_buf_.resize(static_cast<size_t>(proto_c_) * proto_h_ * proto_w_);
+
+    std::cout << "[YoloSegEngine] ready: input " << input_w_ << "x" << input_h_
+              << ", det [" << det_count_ << "," << det_stride_ << "]"
+              << ", proto [" << proto_c_ << "," << proto_h_ << "," << proto_w_ << "]\n";
+    initialized_ = true;
+    return true;
+}
+
+SegResult YoloSegEngine::infer(const cv::Mat& bgr, int64_t stamp_ns) {
+    SegResult result;
+    if (!initialized_ || bgr.empty()) return result;
+    result.stamp_ns = stamp_ns;
+
+    using clock = std::chrono::steady_clock;
+    auto ms_since = [](clock::time_point t) {
+        return std::chrono::duration<double, std::milli>(clock::now() - t).count();
+    };
+
+    // ── preprocess (generic) ──
+    const auto t_pre = clock::now();
+    LetterboxTransform lb;
+    yolo_preprocess(bgr, input_w_, input_h_, input_buf_.data(), lb, pre_scratch_);
+    pre_ms_.store(ms_since(t_pre), std::memory_order_relaxed);
+
+    // ── inference (generic) ──
+    const auto t_inf = clock::now();
+    infer_.set_input_async(cfg_.input_name, input_buf_);
+    if (!infer_.enqueue()) {
+        std::cerr << "[YoloSegEngine] enqueue failed\n";
+        return result;
+    }
+    infer_.get_output_async(cfg_.det_name,   det_buf_);
+    infer_.get_output_async(cfg_.proto_name, proto_buf_);
+    infer_.sync();
+    inf_ms_.store(ms_since(t_inf), std::memory_order_relaxed);
+
+    // ── postprocess (seg-specific) ──
+    const auto t_post = clock::now();
+    yolo_seg_postprocess(det_buf_.data(), det_count_, det_stride_,
+                         proto_buf_.data(), proto_c_, proto_h_, proto_w_,
+                         lb, bgr.cols, bgr.rows, cfg_.score_threshold, result);
+    post_ms_.store(ms_since(t_post), std::memory_order_relaxed);
+
+    return result;
+}
+
+} // namespace kist

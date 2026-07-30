@@ -85,13 +85,18 @@ target_link_libraries(tensorrt_inference PUBLIC
 set_target_properties(tensorrt_inference PROPERTIES CXX_STANDARD 20)
 
 # ─── segmentation ─────────────────────────────────────────────────────────────
-# CV segmentation stage. yolo/YoloSegEngine (Module): letterbox preprocess ->
-# TRT (tensorrt_inference) -> NMS-free postprocess -> instance masks. SegInference
-# (Thread): runs the engine on a worker thread from an injected frame source and
-# publishes DataBuffer<SegResult>. C++20 (pulls the TRT engine header).
+# CV inference stage under cv/. Split by reuse: yolo_preprocess and yolo_inference
+# are generic YOLO (detection/seg/pose share them); the seg-specific postprocess +
+# YoloSegEngine orchestrator live in cv/yolo/segmentation/. CvInference (cv/) is the
+# subsystem's worker Thread + lifecycle facade a runner start()/stop()s. Pipeline:
+# letterbox preprocess -> TRT (tensorrt_inference) -> NMS-free proto-mask
+# postprocess -> DataBuffer<SegResult>. C++20 (pulls the TRT engine header).
 add_library(segmentation STATIC
-    src/segmentation/yolo/yolo_seg_engine.cpp
-    src/segmentation/segment_inference.cpp
+    src/cv/yolo/yolo_preprocess.cpp
+    src/cv/yolo/yolo_inference.cpp
+    src/cv/yolo/segmentation/yolo_seg_postprocess.cpp
+    src/cv/yolo/segmentation/yolo_seg_engine.cpp
+    src/cv/cv_inference.cpp
 )
 target_include_directories(segmentation PUBLIC include ${OpenCV_INCLUDE_DIRS})
 target_link_libraries(segmentation PUBLIC tensorrt_inference ${OpenCV_LIBS})
