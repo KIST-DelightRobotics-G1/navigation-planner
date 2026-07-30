@@ -1,9 +1,10 @@
 #pragma once
 
-#include "cv/yolo/segmentation/seg_result.hpp"
-#include "cv/yolo/segmentation/yolo_seg_postprocess.hpp"
+#include "cv/yolo/instance_segmentation/yolo_inst_seg_postprocess.hpp"
+#include "cv/yolo/instance_segmentation/yolo_inst_seg_result.hpp"
 #include "cv/yolo/yolo_inference.hpp"
 #include "cv/yolo/yolo_preprocess.hpp"
+#include "cv/yolo/yolo_timings.hpp"
 #include "tensorrt/InferenceEngine.h"   // TPinnedVector
 
 #include <opencv2/core.hpp>
@@ -14,16 +15,7 @@
 
 namespace kist {
 
-// Per-stage wall-clock cost of the last infer() call (ms). Diagnostic only —
-// lets a runner see whether a frame is preprocess-, GPU-, or postprocess-bound.
-// `infer` covers the whole H2D + enqueue + D2H block up to the stream sync.
-struct SegTimings {
-    double preprocess_ms  = 0.0;
-    double infer_ms       = 0.0;
-    double postprocess_ms = 0.0;
-};
-
-struct YoloSegConfig {
+struct YoloInstSegConfig {
     std::string onnx_path = "models/yolo26l-seg.onnx";
 
     float score_threshold = 0.25f;   // drop detections below this confidence
@@ -35,38 +27,37 @@ struct YoloSegConfig {
     std::string proto_name = "output1";  // [1, num_masks, ph, pw] (mask protos)
 };
 
-// YOLO26-seg inference Module (no thread). A thin orchestrator that composes the
-// three stages — yolo_preprocess (generic) -> YoloInference (generic) ->
-// yolo_seg_postprocess (seg-specific) — and owns the pinned I/O buffers between
-// them. The CvInference worker thread drives this from the camera buffer; the
-// static-image test runner drives it directly.
-class YoloSegEngine {
+// YOLO26 instance-seg Module (no thread). Composes the three stages —
+// yolo_preprocess (generic) -> YoloInference (generic) -> YoloInstSegPostprocess
+// (cuBLAS proto GEMM) — and owns the pinned I/O buffers between them. The
+// YoloPipeline worker thread drives it from the camera buffer; the static-image
+// test runner drives it directly.
+class YoloInstSegEngine {
 public:
-    YoloSegEngine() = default;
+    // Pipeline plumbing (YoloPipeline<Engine> reads these).
+    using Config = YoloInstSegConfig;
+    using Result = InstSegResult;
 
-    // Builds/loads the engine. Returns false (with a logged reason) on failure.
-    bool init(const YoloSegConfig& cfg);
+    YoloInstSegEngine() = default;
+
+    bool init(const Config& cfg);
 
     // Runs one frame. stamp_ns is copied into the result. Boxes are in original-
-    // image pixels; masks are at proto resolution (see SegResult). Returns an
-    // empty result if not initialized.
-    SegResult infer(const cv::Mat& bgr, int64_t stamp_ns = 0);
+    // image pixels; masks are at proto resolution (see InstSegResult).
+    InstSegResult infer(const cv::Mat& bgr, int64_t stamp_ns = 0);
 
     bool initialized() const { return initialized_; }
-
-    // Per-stage cost of the most recent infer() (ms). Cheap to poll from another
-    // thread; values are a single-frame snapshot, not smoothed.
-    SegTimings timings() const {
+    YoloStageTimings timings() const {
         return { pre_ms_.load(std::memory_order_relaxed),
                  inf_ms_.load(std::memory_order_relaxed),
                  post_ms_.load(std::memory_order_relaxed) };
     }
 
 private:
-    YoloSegConfig         cfg_;
-    YoloInference         infer_;
-    YoloPreprocessScratch pre_scratch_;
-    YoloSegPostprocess    post_;
+    Config                 cfg_;
+    YoloInference          infer_;
+    YoloPreprocessScratch  pre_scratch_;
+    YoloInstSegPostprocess post_;
 
     int input_w_ = 0, input_h_ = 0;              // model input (from engine)
     int det_count_ = 0, det_stride_ = 0;         // output0: [det_count_, det_stride_]

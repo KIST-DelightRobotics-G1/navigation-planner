@@ -7,25 +7,25 @@
 
 namespace kist {
 
-// One segmented instance from YoloSegEngine.
-struct SegDetection {
+// One segmented instance from YoloInstSegEngine.
+struct InstSegDetection {
     cv::Rect box;        // bounding box in original-image pixels
     float    score = 0;  // confidence
     int      class_id = -1;
-    // Instance mask at PROTO resolution (SegResult.mask_width x mask_height),
+    // Instance mask at PROTO resolution (InstSegResult.mask_width x mask_height),
     // CV_8U (0/255), zero outside the instance. Kept at the network's prototype
     // resolution — not upsampled to the frame — so postprocess stays O(proto),
     // independent of object size/count (matches Ultralytics process_mask with
     // upsample=False). Aligned to the letterboxed model input; use
-    // SegResult::orig_to_mask() to sample it at an original-image pixel.
+    // InstSegResult::orig_to_mask() to sample it at an original-image pixel.
     cv::Mat  mask;
 };
 
-// Output of YoloSegEngine for one frame. Masks live at prototype resolution;
+// Output of YoloInstSegEngine for one frame. Masks live at prototype resolution;
 // the letterbox transform below maps an original-image pixel into mask space so
 // any consumer (viewer overlay, depth fusion) can sample without the engine
 // materializing a full-resolution mask per instance.
-struct SegResult {
+struct InstSegResult {
     int64_t stamp_ns = 0;              // carried through from the input frame
     int     width = 0, height = 0;     // original-image size
 
@@ -36,7 +36,7 @@ struct SegResult {
     float scale = 1.0f;                        // original -> letterboxed input
     int   pad_x = 0, pad_y = 0;                // letterbox padding, input px
 
-    std::vector<SegDetection> detections;
+    std::vector<InstSegDetection> detections;
 
     // Map an original-image pixel to its location in the proto-resolution mask.
     cv::Point2f orig_to_mask(float ox, float oy) const {

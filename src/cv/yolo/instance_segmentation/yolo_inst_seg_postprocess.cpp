@@ -1,4 +1,4 @@
-#include "cv/yolo/segmentation/yolo_seg_postprocess.hpp"
+#include "cv/yolo/instance_segmentation/yolo_inst_seg_postprocess.hpp"
 
 #include <opencv2/core.hpp>
 
@@ -14,11 +14,11 @@ namespace kist {
 
 namespace {
 // Cap on instances handled per frame (sizes the device/host mask scratch). Well
-// above any realistic scene; extra detections past this are dropped (warned).
+// above any realistic scene; extra detections past this are dropped.
 constexpr int kMaxInstances = 64;
 }
 
-struct YoloSegPostprocess::Impl {
+struct YoloInstSegPostprocess::Impl {
     cublasHandle_t handle = nullptr;
     cudaStream_t   stream = nullptr;
 
@@ -41,12 +41,12 @@ struct YoloSegPostprocess::Impl {
     }
 };
 
-YoloSegPostprocess::YoloSegPostprocess() : impl_(std::make_unique<Impl>()) {}
-YoloSegPostprocess::~YoloSegPostprocess() = default;
+YoloInstSegPostprocess::YoloInstSegPostprocess() : impl_(std::make_unique<Impl>()) {}
+YoloInstSegPostprocess::~YoloInstSegPostprocess() = default;
 
-bool YoloSegPostprocess::init(int det_count, int det_stride,
-                              int proto_c, int proto_h, int proto_w,
-                              cudaStream_t stream) {
+bool YoloInstSegPostprocess::init(int det_count, int det_stride,
+                                  int proto_c, int proto_h, int proto_w,
+                                  cudaStream_t stream) {
     auto& im = *impl_;
     im.det_count = det_count; im.det_stride = det_stride;
     im.proto_c = proto_c; im.proto_h = proto_h; im.proto_w = proto_w;
@@ -55,7 +55,7 @@ bool YoloSegPostprocess::init(int det_count, int det_stride,
     im.stream = stream;
 
     if (cublasCreate(&im.handle) != CUBLAS_STATUS_SUCCESS) {
-        std::fprintf(stderr, "[YoloSegPostprocess] cublasCreate failed\n");
+        std::fprintf(stderr, "[YoloInstSegPostprocess] cublasCreate failed\n");
         return false;
     }
     cublasSetStream(im.handle, stream);
@@ -66,15 +66,15 @@ bool YoloSegPostprocess::init(int det_count, int det_stride,
         cudaMalloc(reinterpret_cast<void**>(&im.d_masks),  mask_n  * sizeof(float)) != cudaSuccess ||
         cudaMallocHost(reinterpret_cast<void**>(&im.h_coeffs), coeff_n * sizeof(float)) != cudaSuccess ||
         cudaMallocHost(reinterpret_cast<void**>(&im.h_masks),  mask_n  * sizeof(float)) != cudaSuccess) {
-        std::fprintf(stderr, "[YoloSegPostprocess] scratch alloc failed\n");
+        std::fprintf(stderr, "[YoloInstSegPostprocess] scratch alloc failed\n");
         return false;
     }
     return true;
 }
 
-void YoloSegPostprocess::run(const float* det_host, const void* proto_device,
-                             const LetterboxTransform& lb, int orig_w, int orig_h,
-                             float score_threshold, SegResult& out) {
+void YoloInstSegPostprocess::run(const float* det_host, const void* proto_device,
+                                 const LetterboxTransform& lb, int orig_w, int orig_h,
+                                 float score_threshold, InstSegResult& out) {
     auto& im = *impl_;
 
     out.width  = orig_w;       out.height = orig_h;
@@ -122,8 +122,8 @@ void YoloSegPostprocess::run(const float* det_host, const void* proto_device,
     // Pass 2 (GPU): one batched GEMM on the inference stream —
     //   masks[n, area] = coeffs[n, C] x proto[C, area]
     // proto stays on the device; only coeffs (tiny) go up and the mask logits
-    // come back. cuBLAS is column-major, so the row-major C=A*B is issued as the
-    // equivalent (n=area, then n_rows, then k) form.
+    // come back. cuBLAS is column-major, so row-major C=A*B is issued in the
+    // equivalent (area, n, C) form.
     const float alpha = 1.0f, beta = 0.0f;
     cudaMemcpyAsync(im.d_coeffs, im.h_coeffs, size_t(n) * im.proto_c * sizeof(float),
                     cudaMemcpyHostToDevice, im.stream);
@@ -147,7 +147,7 @@ void YoloSegPostprocess::run(const float* det_host, const void* proto_device,
         cv::Mat bin = m(keep[k].pbox) > 0.0f;   // logit>0 -> CV_8U 0/255
         bin.copyTo(mask(keep[k].pbox));
 
-        SegDetection dobj;
+        InstSegDetection dobj;
         dobj.box      = keep[k].box;
         dobj.score    = keep[k].score;
         dobj.class_id = keep[k].class_id;

@@ -34,6 +34,9 @@ public:
     void set_input_async(const std::string& name, const TPinnedVector<float>& buf);
     bool enqueue();
     void get_output_async(const std::string& name, TPinnedVector<float>& buf);
+    // Raw byte D2H — for outputs whose dtype isn't float (e.g. a UINT8 class-id
+    // map from a semantic-seg head). `dst` must hold at least `byteCount` bytes.
+    void get_output_async(const std::string& name, void* dst, size_t byteCount);
     void sync();
 
     // Raw device pointer of an output tensor (valid after enqueue+sync, until the

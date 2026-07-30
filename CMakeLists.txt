@@ -84,29 +84,31 @@ target_link_libraries(tensorrt_inference PUBLIC
 )
 set_target_properties(tensorrt_inference PROPERTIES CXX_STANDARD 20)
 
-# ─── segmentation ─────────────────────────────────────────────────────────────
-# CV inference stage under cv/. Split by reuse: yolo_preprocess and yolo_inference
-# are generic YOLO (detection/seg/pose share them); the seg-specific postprocess +
-# YoloSegEngine orchestrator live in cv/yolo/segmentation/. CvInference (cv/) is the
-# subsystem's worker Thread + lifecycle facade a runner start()/stop()s. Pipeline:
-# letterbox preprocess -> TRT (tensorrt_inference) -> NMS-free proto-mask
-# postprocess -> DataBuffer<SegResult>. C++20 (pulls the TRT engine header).
-add_library(segmentation STATIC
+# ─── cv_yolo ──────────────────────────────────────────────────────────────────
+# CV YOLO inference under cv/yolo/. Shared generics (yolo_preprocess, yolo_inference,
+# and the header-only templated YoloPipeline worker) + two task engines:
+# instance_segmentation/ (proto-mask postprocess, cuBLAS GEMM) and
+# semantic_segmentation/ (dense UINT8 class map, trivial postprocess). Pipeline:
+# letterbox preprocess -> TRT (tensorrt_inference) -> task postprocess ->
+# DataBuffer<Result>. C++20 (pulls the TRT engine header). YoloPipeline is a
+# header-only template, so nothing to compile for it here.
+add_library(cv_yolo STATIC
     src/cv/yolo/yolo_preprocess.cpp
     src/cv/yolo/yolo_inference.cpp
-    src/cv/yolo/segmentation/yolo_seg_postprocess.cpp
-    src/cv/yolo/segmentation/yolo_seg_engine.cpp
-    src/cv/cv_inference.cpp
+    src/cv/yolo/instance_segmentation/yolo_inst_seg_postprocess.cpp
+    src/cv/yolo/instance_segmentation/yolo_inst_seg_engine.cpp
+    src/cv/yolo/semantic_segmentation/yolo_sem_seg_postprocess.cpp
+    src/cv/yolo/semantic_segmentation/yolo_sem_seg_engine.cpp
 )
-target_include_directories(segmentation PUBLIC include ${OpenCV_INCLUDE_DIRS})
-# CUDA::cublas + cudart for the GPU postprocess (coeff x proto GEMM on-device).
-target_link_libraries(segmentation PUBLIC tensorrt_inference ${OpenCV_LIBS}
+target_include_directories(cv_yolo PUBLIC include ${OpenCV_INCLUDE_DIRS})
+# CUDA::cublas + cudart for the instance GPU postprocess (coeff x proto GEMM).
+target_link_libraries(cv_yolo PUBLIC tensorrt_inference ${OpenCV_LIBS}
     CUDA::cublas CUDA::cudart)
-set_target_properties(segmentation PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
+set_target_properties(cv_yolo PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
 
-# Static-image seg check — the model goes in models/ (yolo26l-seg.onnx).
+# Static-image instance-seg check — the model goes in models/ (yolo26l-seg.onnx).
 add_executable(test_yolo_seg test/test_yolo_seg.cpp)
-target_link_libraries(test_yolo_seg PRIVATE segmentation)
+target_link_libraries(test_yolo_seg PRIVATE cv_yolo)
 set_target_properties(test_yolo_seg PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
 
 # ─── tests ────────────────────────────────────────────────────────────────────
@@ -157,15 +159,28 @@ if(EXISTS "${KIST_EXT_SENSOR_IO}/CMakeLists.txt")
         message(STATUS "OpenCV not found — skipping test_pose_filter_viewer")
     endif()
 
-    # Live camera segmentation: RealsenseReceiver (H.264 color, embedded) ->
-    # YoloSegEngine -> OpenCV mask overlay. ext's realsense_receiver only exists
-    # when its Rx deps (libav + idlc) are present — i.e. the Docker image.
+    # Live camera CV: RealsenseReceiver (H.264 color, embedded) -> YoloPipeline
+    # -> OpenCV overlay. Instance-seg (masks) and semantic-seg (class map) share
+    # the receiver wiring. ext's realsense_receiver only exists when its Rx deps
+    # (libav + idlc) are present — i.e. the Docker image.
     if(TARGET realsense_receiver AND OpenCV_FOUND)
         add_executable(test_seg_camera test/test_seg_camera.cpp)
         target_link_libraries(test_seg_camera
-            PRIVATE segmentation realsense_receiver yaml-cpp ${OpenCV_LIBS})
+            PRIVATE cv_yolo realsense_receiver yaml-cpp ${OpenCV_LIBS})
         set_target_properties(test_seg_camera PROPERTIES
             CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
+
+        add_executable(test_sem_camera test/test_sem_camera.cpp)
+        target_link_libraries(test_sem_camera
+            PRIVATE cv_yolo realsense_receiver yaml-cpp ${OpenCV_LIBS})
+        set_target_properties(test_sem_camera PROPERTIES
+            CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
+        # One-shot frame grab from the camera (clean frame -> disk) for model
+        # spikes / offline debugging.
+        add_executable(test_camera_snapshot test/test_camera_snapshot.cpp)
+        target_link_libraries(test_camera_snapshot
+            PRIVATE realsense_receiver yaml-cpp ${OpenCV_LIBS})
+        target_include_directories(test_camera_snapshot PRIVATE ${OpenCV_INCLUDE_DIRS})
     else()
         message(STATUS "realsense_receiver/OpenCV missing — skipping test_seg_camera")
     endif()

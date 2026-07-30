@@ -1,4 +1,4 @@
-// Static-image check for YoloSegEngine (no camera, no DDS) — the first proof
+// Static-image check for YoloInstSegEngine (no camera, no DDS) — the first proof
 // that the vendored TensorRT backend + YOLO26-seg postprocess actually works.
 //   ./test_yolo_seg <image> [onnx_path]     (onnx defaults to models/yolo26l-seg.onnx)
 // Overlays instance masks + boxes + class/score and prints detections. With a
@@ -6,7 +6,7 @@
 //
 // First run builds+caches the .trt engine (slow, ~1min); later runs load it.
 
-#include "cv/yolo/segmentation/yolo_seg_engine.hpp"
+#include "cv/yolo/instance_segmentation/yolo_inst_seg_engine.hpp"
 
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
@@ -55,18 +55,18 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    YoloSegConfig cfg;
+    YoloInstSegConfig cfg;
     if (argc >= 3) cfg.onnx_path = argv[2];
 
     std::printf("[test_yolo_seg] loading engine (%s) - first build may take ~1min\n",
                 cfg.onnx_path.c_str());
-    YoloSegEngine engine;
+    YoloInstSegEngine engine;
     if (!engine.init(cfg)) return 1;
 
     // Timed inference (a warmup pass first so the timing excludes lazy setup).
     engine.infer(img);
     const auto t0 = std::chrono::steady_clock::now();
-    SegResult r = engine.infer(img, 1);
+    InstSegResult r = engine.infer(img, 1);
     const auto t1 = std::chrono::steady_clock::now();
     const double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
     std::printf("[test_yolo_seg] %zu detections in %.1f ms (%.1f fps)\n",

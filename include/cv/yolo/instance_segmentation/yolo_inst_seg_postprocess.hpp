@@ -1,6 +1,6 @@
 #pragma once
 
-#include "cv/yolo/segmentation/seg_result.hpp"
+#include "cv/yolo/instance_segmentation/yolo_inst_seg_result.hpp"
 #include "cv/yolo/yolo_preprocess.hpp"   // LetterboxTransform
 
 #include <memory>
@@ -10,21 +10,21 @@ typedef struct CUstream_st* cudaStream_t;
 
 namespace kist {
 
-// NMS-free YOLO-seg postprocess: decode raw model outputs into a SegResult, with
-// the coeff x proto GEMM run on the GPU (cuBLAS). The prototype tensor stays on
-// the device (no device->host copy); only the small detection tensor is on the
-// host (for the score filter) and only the resulting per-instance mask logits
-// come back. Masks are kept at PROTO resolution (Ultralytics process_mask,
-// upsample=False): crop to the box and threshold the logit at 0
-// (sigmoid(x)>0.5 <=> x>0). Owns the cuBLAS handle + device/host scratch, so it
-// is a small stateful object rather than a free function.
-class YoloSegPostprocess {
+// NMS-free YOLO instance-seg postprocess: decode raw model outputs into an
+// InstSegResult, with the coeff x proto GEMM run on the GPU (cuBLAS). The
+// prototype tensor stays on the device (no device->host copy); only the small
+// detection tensor is on the host (for the score filter) and only the resulting
+// per-instance mask logits come back. Masks are kept at PROTO resolution
+// (Ultralytics process_mask, upsample=False): crop to the box and threshold the
+// logit at 0 (sigmoid(x)>0.5 <=> x>0). Owns the cuBLAS handle + device/host
+// scratch, so it is a small stateful object rather than a free function.
+class YoloInstSegPostprocess {
 public:
-    YoloSegPostprocess();
-    ~YoloSegPostprocess();
+    YoloInstSegPostprocess();
+    ~YoloInstSegPostprocess();
 
-    YoloSegPostprocess(const YoloSegPostprocess&) = delete;
-    YoloSegPostprocess& operator=(const YoloSegPostprocess&) = delete;
+    YoloInstSegPostprocess(const YoloInstSegPostprocess&) = delete;
+    YoloInstSegPostprocess& operator=(const YoloInstSegPostprocess&) = delete;
 
     // Allocate the cuBLAS handle + scratch for these output shapes. `stream` is
     // the inference stream (the GEMM runs on it after the outputs are ready).
@@ -37,7 +37,7 @@ public:
     // out.stamp_ns.
     void run(const float* det_host, const void* proto_device,
              const LetterboxTransform& lb, int orig_w, int orig_h,
-             float score_threshold, SegResult& out);
+             float score_threshold, InstSegResult& out);
 
 private:
     struct Impl;

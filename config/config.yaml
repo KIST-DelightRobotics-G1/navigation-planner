@@ -38,13 +38,16 @@ pose_filter:
   # starts publishing.
   bias_calibrated_std_deg: 5.0
 
-segmentation:
-  # YOLO26-seg camera inference. Reads the camera whose Tx publishes under this
-  # name (rt/kist/camera/<camera>/...).
-  camera: head
-  # Worker inference-rate cap (fps). 0 (or negative) = no cap: run as fast as
-  # the GPU allows. Positive values throttle the seg thread to that rate.
+cv_inference:
+  # Camera-driven YOLO inference. One camera + one rate are shared across the CV
+  # tasks (instance / semantic) — a single inference runs at a time, so these
+  # aren't per-task. Only the model path differs per task.
+  camera: head              # which camera's DDS topics to consume (rt/kist/camera/<camera>/...)
+  # Worker inference-rate cap (fps). 0 (or negative) = no cap: run as fast as the
+  # camera/GPU allow. Positive values throttle the worker to that rate.
   target_fps: 30
+  instance_onnx: models/yolo26l-seg.onnx   # YOLO26 instance-seg (proto masks)
+  semantic_onnx: models/yolo26l-sem.onnx   # YOLO26 semantic-seg (dense class map)
 
 pointcloud_processor:
   # Runs on the reader's DDS receive thread (set_processor hook):

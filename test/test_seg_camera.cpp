@@ -1,6 +1,6 @@
 // Live camera segmentation (robot LAN + RealSense transmitter running):
 //   ./test_seg_camera [config_path]        (default config/config.yaml)
-// Wires the embedded RealsenseReceiver (H.264 color over DDS) into CvInference,
+// Wires the embedded RealsenseReceiver (H.264 color over DDS) into YoloPipeline,
 // which runs YOLO26-seg on its own worker thread (latest-wins), and overlays the
 // latest masks on the live video. With a DISPLAY it opens a window
 // (ESC to quit); headless it writes /tmp/seg_camera_out.png. Detection rate is
@@ -10,7 +10,8 @@
 // on the robot; free the device first with scripts/free_camera.sh). First run
 // builds+caches the .trt engine.
 
-#include "cv/cv_inference.hpp"
+#include "cv/yolo/yolo_pipeline.hpp"
+#include "cv/yolo/instance_segmentation/yolo_inst_seg_engine.hpp"
 #include "system/realsense_receiver.hpp"   // embedded from kist-ext-sensor-io
 #include "common/config.hpp"
 
@@ -52,7 +53,7 @@ cv::Scalar color_for(int id) {
     return cv::Scalar(c[0], c[1], c[2]);
 }
 
-void draw(cv::Mat& vis, const cv::Mat& base, const SegResult& r) {
+void draw(cv::Mat& vis, const cv::Mat& base, const InstSegResult& r) {
     for (const auto& d : r.detections) {
         const cv::Scalar col = color_for(d.class_id);
         cv::Rect box = d.box & cv::Rect(0, 0, vis.cols, vis.rows);
@@ -90,23 +91,22 @@ int main(int argc, char** argv) {
     const int         domain_id = unitree_cfg["domain_id"].as<int>();
     const std::string interface = unitree_cfg["network_interface"].as<std::string>();
 
-    CvInferenceConfig ccfg;
-    ccfg.seg_target_fps = 10.0;
-    std::string cam_name = "head";   // which camera's topics to segment
-    if (const auto sc = Config::instance().root()["segmentation"]) {
-        ccfg.seg.onnx_path  = sc["onnx_path"].as<std::string>(ccfg.seg.onnx_path);
-        ccfg.seg_target_fps = sc["target_fps"].as<double>(ccfg.seg_target_fps);
-        cam_name            = sc["camera"].as<std::string>(cam_name);
+    YoloInstSegConfig cfg;
+    double      target_fps = 30.0;
+    std::string cam_name   = "head";   // which camera's topics to segment
+    if (const auto cv = Config::instance().root()["cv_inference"]) {
+        cfg.onnx_path = cv["instance_onnx"].as<std::string>(cfg.onnx_path);
+        target_fps    = cv["target_fps"].as<double>(target_fps);
+        cam_name      = cv["camera"].as<std::string>(cam_name);
     }
-    const double target_fps = ccfg.seg_target_fps;
 
     RealsenseReceiver rx;
     if (!rx.start(domain_id, interface, cam_name)) return 1;
 
-    // main only wires the frame source + start/stop; CvInference owns the
-    // YOLO pipeline and its worker thread.
-    CvInference cvi;
-    if (!cvi.start(ccfg, [&](cv::Mat& bgr, int64_t& stamp) -> bool {
+    // main only wires the frame source + start/stop; the pipeline owns the YOLO
+    // instance-seg engine and its worker thread.
+    YoloPipeline<YoloInstSegEngine> pipe;
+    if (!pipe.start(cfg, target_fps, [&](cv::Mat& bgr, int64_t& stamp) -> bool {
         auto cf = rx.color().GetData();
         if (!cf || cf->empty()) return false;
         stamp = cf->stamp_ns;
@@ -129,7 +129,7 @@ int main(int argc, char** argv) {
 
     while (!g_stop) {
         auto cf  = rx.color().GetData();
-        auto res = cvi.seg_result().GetData();
+        auto res = pipe.result().GetData();
 
         if (cf && !cf->empty()) {
             cv::Mat bgr(cf->height, cf->width, CV_8UC3,
@@ -160,8 +160,8 @@ int main(int argc, char** argv) {
         const auto now = std::chrono::steady_clock::now();
         if (now - log_window >= std::chrono::seconds(1)) {
             log_window = now;
-            const uint64_t processed = cvi.seg_frames_processed();
-            const auto t = cvi.seg_timings();
+            const uint64_t processed = pipe.frames_processed();
+            const auto t = pipe.timings();
             std::printf("seg %2llu fps  %d det/frame avg  "
                         "[pre %.1f  infer %.1f  post %.1f ms]  %s\n",
                         (unsigned long long)(processed - last_processed),
@@ -173,7 +173,7 @@ int main(int argc, char** argv) {
         }
     }
 
-    cvi.stop();
+    pipe.stop();
     rx.stop();
     return 0;
 }

@@ -55,6 +55,10 @@ void YoloInference::get_output_async(const std::string& name, TPinnedVector<floa
     engine_.GetOutputDataAsync(name, buf, stream_);
 }
 
+void YoloInference::get_output_async(const std::string& name, void* dst, size_t byteCount) {
+    engine_.GetOutputDataAsync(name, dst, byteCount, stream_);
+}
+
 void YoloInference::sync() {
     cudaStreamSynchronize(stream_);
 }

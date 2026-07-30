@@ -1,15 +1,15 @@
-#include "cv/yolo/segmentation/yolo_seg_engine.hpp"
+#include "cv/yolo/instance_segmentation/yolo_inst_seg_engine.hpp"
 
 #include <chrono>
 #include <iostream>
 
 namespace kist {
 
-bool YoloSegEngine::init(const YoloSegConfig& cfg) {
+bool YoloInstSegEngine::init(const Config& cfg) {
     cfg_ = cfg;
 
     if (!infer_.init(cfg_.onnx_path)) {
-        std::cerr << "[YoloSegEngine] inference init failed: " << cfg_.onnx_path << "\n";
+        std::cerr << "[YoloInstSegEngine] inference init failed: " << cfg_.onnx_path << "\n";
         return false;
     }
 
@@ -18,7 +18,7 @@ bool YoloSegEngine::init(const YoloSegConfig& cfg) {
     auto det_s   = infer_.tensor_shape(cfg_.det_name);     // [1, N, S]
     auto proto_s = infer_.tensor_shape(cfg_.proto_name);   // [1, C, ph, pw]
     if (in_s.size() != 4 || det_s.size() != 3 || proto_s.size() != 4) {
-        std::cerr << "[YoloSegEngine] unexpected tensor ranks (in=" << in_s.size()
+        std::cerr << "[YoloInstSegEngine] unexpected tensor ranks (in=" << in_s.size()
                   << " det=" << det_s.size() << " proto=" << proto_s.size() << ")\n";
         return false;
     }
@@ -33,19 +33,19 @@ bool YoloSegEngine::init(const YoloSegConfig& cfg) {
     // the inference stream so it runs right after the outputs are ready.
     if (!post_.init(det_count_, det_stride_, proto_c_, proto_h_, proto_w_,
                     infer_.stream())) {
-        std::cerr << "[YoloSegEngine] postprocess init failed\n";
+        std::cerr << "[YoloInstSegEngine] postprocess init failed\n";
         return false;
     }
 
-    std::cout << "[YoloSegEngine] ready: input " << input_w_ << "x" << input_h_
+    std::cout << "[YoloInstSegEngine] ready: input " << input_w_ << "x" << input_h_
               << ", det [" << det_count_ << "," << det_stride_ << "]"
               << ", proto [" << proto_c_ << "," << proto_h_ << "," << proto_w_ << "]\n";
     initialized_ = true;
     return true;
 }
 
-SegResult YoloSegEngine::infer(const cv::Mat& bgr, int64_t stamp_ns) {
-    SegResult result;
+InstSegResult YoloInstSegEngine::infer(const cv::Mat& bgr, int64_t stamp_ns) {
+    InstSegResult result;
     if (!initialized_ || bgr.empty()) return result;
     result.stamp_ns = stamp_ns;
 
@@ -60,20 +60,19 @@ SegResult YoloSegEngine::infer(const cv::Mat& bgr, int64_t stamp_ns) {
     yolo_preprocess(bgr, input_w_, input_h_, input_buf_.data(), lb, pre_scratch_);
     pre_ms_.store(ms_since(t_pre), std::memory_order_relaxed);
 
-    // ── inference (generic) ──
-    // Only the detection tensor comes back to the host; the prototype tensor
-    // stays on the GPU for the cuBLAS postprocess below.
+    // ── inference (generic) ── only the detection tensor comes to the host; the
+    // prototype tensor stays on the GPU for the cuBLAS postprocess below.
     const auto t_inf = clock::now();
     infer_.set_input_async(cfg_.input_name, input_buf_);
     if (!infer_.enqueue()) {
-        std::cerr << "[YoloSegEngine] enqueue failed\n";
+        std::cerr << "[YoloInstSegEngine] enqueue failed\n";
         return result;
     }
     infer_.get_output_async(cfg_.det_name, det_buf_);
     infer_.sync();
     inf_ms_.store(ms_since(t_inf), std::memory_order_relaxed);
 
-    // ── postprocess (seg-specific, GPU GEMM) ──
+    // ── postprocess (cuBLAS GEMM) ──
     const auto t_post = clock::now();
     post_.run(det_buf_.data(), infer_.output_device_ptr(cfg_.proto_name),
               lb, bgr.cols, bgr.rows, cfg_.score_threshold, result);
