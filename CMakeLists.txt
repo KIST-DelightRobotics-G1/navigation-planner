@@ -99,7 +99,9 @@ add_library(segmentation STATIC
     src/cv/cv_inference.cpp
 )
 target_include_directories(segmentation PUBLIC include ${OpenCV_INCLUDE_DIRS})
-target_link_libraries(segmentation PUBLIC tensorrt_inference ${OpenCV_LIBS})
+# CUDA::cublas + cudart for the GPU postprocess (coeff x proto GEMM on-device).
+target_link_libraries(segmentation PUBLIC tensorrt_inference ${OpenCV_LIBS}
+    CUDA::cublas CUDA::cudart)
 set_target_properties(segmentation PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
 
 # Static-image seg check — the model goes in models/ (yolo26l-seg.onnx).

@@ -78,6 +78,11 @@ public:
     template<typename T> void GetOutputDataAsync(const std::string& name, T* data, size_t elementCount, cudaStream_t stream);
     template<typename T> void GetOutputDataAsync(const std::string& name, TPinnedVector<T>& data, cudaStream_t stream);
 
+    // Raw device (GPU) pointer to an output tensor's buffer, so a caller can run
+    // its own CUDA/cuBLAS postprocessing on the output in place — no device->host
+    // copy. Valid after Enqueue until the next Enqueue/Destroy; do not free it.
+    void* GetOutputDevicePtr(const std::string& name);
+
     std::vector<std::string> GetInputTensorNames() const;
     std::vector<std::string> GetOutputTensorNames() const;
 

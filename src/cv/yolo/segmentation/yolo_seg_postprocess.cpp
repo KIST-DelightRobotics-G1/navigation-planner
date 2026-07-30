@@ -1,37 +1,101 @@
 #include "cv/yolo/segmentation/yolo_seg_postprocess.hpp"
 
+#include <opencv2/core.hpp>
+
+#include <cublas_v2.h>
+#include <cuda_runtime_api.h>
+
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <vector>
 
 namespace kist {
 
-void yolo_seg_postprocess(const float* det, int det_count, int det_stride,
-                          const float* proto, int proto_c, int proto_h, int proto_w,
-                          const LetterboxTransform& lb, int orig_w, int orig_h,
-                          float score_threshold, SegResult& out) {
-    out.width  = orig_w;      out.height = orig_h;
-    out.mask_width  = proto_w; out.mask_height = proto_h;
+namespace {
+// Cap on instances handled per frame (sizes the device/host mask scratch). Well
+// above any realistic scene; extra detections past this are dropped (warned).
+constexpr int kMaxInstances = 64;
+}
+
+struct YoloSegPostprocess::Impl {
+    cublasHandle_t handle = nullptr;
+    cudaStream_t   stream = nullptr;
+
+    int det_count = 0, det_stride = 0;
+    int proto_c = 0, proto_h = 0, proto_w = 0;
+    int area = 0;          // proto_h * proto_w
+    int max_n = 0;         // min(det_count, kMaxInstances)
+
+    float* d_coeffs = nullptr;   // device [max_n, proto_c]
+    float* d_masks  = nullptr;   // device [max_n, area]
+    float* h_coeffs = nullptr;   // pinned [max_n, proto_c]
+    float* h_masks  = nullptr;   // pinned [max_n, area]
+
+    ~Impl() {
+        if (d_coeffs) cudaFree(d_coeffs);
+        if (d_masks)  cudaFree(d_masks);
+        if (h_coeffs) cudaFreeHost(h_coeffs);
+        if (h_masks)  cudaFreeHost(h_masks);
+        if (handle)   cublasDestroy(handle);
+    }
+};
+
+YoloSegPostprocess::YoloSegPostprocess() : impl_(std::make_unique<Impl>()) {}
+YoloSegPostprocess::~YoloSegPostprocess() = default;
+
+bool YoloSegPostprocess::init(int det_count, int det_stride,
+                              int proto_c, int proto_h, int proto_w,
+                              cudaStream_t stream) {
+    auto& im = *impl_;
+    im.det_count = det_count; im.det_stride = det_stride;
+    im.proto_c = proto_c; im.proto_h = proto_h; im.proto_w = proto_w;
+    im.area  = proto_h * proto_w;
+    im.max_n = std::min(det_count, kMaxInstances);
+    im.stream = stream;
+
+    if (cublasCreate(&im.handle) != CUBLAS_STATUS_SUCCESS) {
+        std::fprintf(stderr, "[YoloSegPostprocess] cublasCreate failed\n");
+        return false;
+    }
+    cublasSetStream(im.handle, stream);
+
+    const size_t coeff_n = size_t(im.max_n) * im.proto_c;
+    const size_t mask_n  = size_t(im.max_n) * im.area;
+    if (cudaMalloc(reinterpret_cast<void**>(&im.d_coeffs), coeff_n * sizeof(float)) != cudaSuccess ||
+        cudaMalloc(reinterpret_cast<void**>(&im.d_masks),  mask_n  * sizeof(float)) != cudaSuccess ||
+        cudaMallocHost(reinterpret_cast<void**>(&im.h_coeffs), coeff_n * sizeof(float)) != cudaSuccess ||
+        cudaMallocHost(reinterpret_cast<void**>(&im.h_masks),  mask_n  * sizeof(float)) != cudaSuccess) {
+        std::fprintf(stderr, "[YoloSegPostprocess] scratch alloc failed\n");
+        return false;
+    }
+    return true;
+}
+
+void YoloSegPostprocess::run(const float* det_host, const void* proto_device,
+                             const LetterboxTransform& lb, int orig_w, int orig_h,
+                             float score_threshold, SegResult& out) {
+    auto& im = *impl_;
+
+    out.width  = orig_w;       out.height = orig_h;
+    out.mask_width  = im.proto_w; out.mask_height = im.proto_h;
     out.input_width = lb.input_w; out.input_height = lb.input_h;
     out.scale = lb.scale; out.pad_x = lb.pad_x; out.pad_y = lb.pad_y;
 
-    const int    num_masks  = proto_c;
-    const size_t proto_area = static_cast<size_t>(proto_h) * proto_w;
-    // protos as a [C, ph*pw] matrix for the coeff x proto GEMM.
-    const cv::Mat proto_mat(num_masks, int(proto_area), CV_32F, const_cast<float*>(proto));
-    const float sx = proto_w / float(lb.input_w), sy = proto_h / float(lb.input_h);
+    const float sx = im.proto_w / float(lb.input_w), sy = im.proto_h / float(lb.input_h);
     const float scale = lb.scale;
     const int   px = lb.pad_x, py = lb.pad_y;
 
-    // Pass 1: keep detections above threshold, gather their geometry + mask
-    // coefficients into one [N, C] matrix. Boxes are in original px; pboxes are
-    // the same boxes in proto coords (proto is aligned to the letterboxed input).
+    // Pass 1 (CPU): keep detections above threshold; gather their coeffs into the
+    // pinned staging buffer + record box/pbox. Boxes are in original px; pboxes
+    // are the same boxes in proto coords (proto is aligned to the letterboxed input).
     struct Keep { cv::Rect box, pbox; float score; int class_id; };
     std::vector<Keep> keep;
-    cv::Mat coeffs;   // [N, C], one row per kept detection
+    keep.reserve(im.max_n);
+    int n = 0;
 
-    for (int i = 0; i < det_count; ++i) {
-        const float* d = det + size_t(i) * det_stride;
+    for (int i = 0; i < im.det_count && n < im.max_n; ++i) {
+        const float* d = det_host + size_t(i) * im.det_stride;
         const float score = d[4];
         if (score < score_threshold) continue;
 
@@ -46,36 +110,49 @@ void yolo_seg_postprocess(const float* det, int det_count, int det_stride,
         cv::Rect pbox(int(std::floor(d[0] * sx)), int(std::floor(d[1] * sy)), 0, 0);
         pbox.width  = int(std::ceil(d[2] * sx)) - pbox.x;
         pbox.height = int(std::ceil(d[3] * sy)) - pbox.y;
-        pbox &= cv::Rect(0, 0, proto_w, proto_h);
+        pbox &= cv::Rect(0, 0, im.proto_w, im.proto_h);
         if (pbox.width <= 0 || pbox.height <= 0) continue;
 
-        coeffs.push_back(cv::Mat(1, num_masks, CV_32F, const_cast<float*>(d + 6)));
+        std::copy(d + 6, d + 6 + im.proto_c, im.h_coeffs + size_t(n) * im.proto_c);
         keep.push_back({box, pbox, score, int(d[5])});
+        ++n;
     }
+    if (n == 0) return;
 
-    // Pass 2: one batched GEMM (coeffs [N,C] x protos [C,area] -> [N,area]),
-    // then each mask is finished at proto resolution — crop to the box and
-    // threshold the raw logit at 0 (sigmoid(x)>0.5 <=> x>0, so no exp needed).
-    // No upsample, no full-frame alloc: cost is O(proto area), object-size
-    // independent (Ultralytics process_mask, upsample=False).
-    if (!keep.empty()) {
-        const cv::Mat masks_all = coeffs * proto_mat;   // [N, ph*pw] logits
-        for (size_t k = 0; k < keep.size(); ++k) {
-            const cv::Mat m(proto_h, proto_w, CV_32F,
-                            const_cast<float*>(masks_all.ptr<float>(int(k))));
+    // Pass 2 (GPU): one batched GEMM on the inference stream —
+    //   masks[n, area] = coeffs[n, C] x proto[C, area]
+    // proto stays on the device; only coeffs (tiny) go up and the mask logits
+    // come back. cuBLAS is column-major, so the row-major C=A*B is issued as the
+    // equivalent (n=area, then n_rows, then k) form.
+    const float alpha = 1.0f, beta = 0.0f;
+    cudaMemcpyAsync(im.d_coeffs, im.h_coeffs, size_t(n) * im.proto_c * sizeof(float),
+                    cudaMemcpyHostToDevice, im.stream);
+    cublasSgemm(im.handle, CUBLAS_OP_N, CUBLAS_OP_N,
+                im.area, n, im.proto_c,
+                &alpha,
+                static_cast<const float*>(proto_device), im.area,   // B [C, area]
+                im.d_coeffs, im.proto_c,                            // A [n, C]
+                &beta,
+                im.d_masks, im.area);                               // C [n, area]
+    cudaMemcpyAsync(im.h_masks, im.d_masks, size_t(n) * im.area * sizeof(float),
+                    cudaMemcpyDeviceToHost, im.stream);
+    cudaStreamSynchronize(im.stream);
 
-            // crop_mask: keep the box region (proto coords), zero elsewhere.
-            cv::Mat mask = cv::Mat::zeros(proto_h, proto_w, CV_8U);
-            cv::Mat bin = m(keep[k].pbox) > 0.0f;   // logit>0 -> CV_8U 0/255
-            bin.copyTo(mask(keep[k].pbox));
+    // Pass 3 (CPU): each mask finished at proto resolution — crop to the box and
+    // threshold the raw logit at 0. No upsample, no full-frame alloc.
+    for (int k = 0; k < n; ++k) {
+        const cv::Mat m(im.proto_h, im.proto_w, CV_32F, im.h_masks + size_t(k) * im.area);
 
-            SegDetection dobj;
-            dobj.box      = keep[k].box;
-            dobj.score    = keep[k].score;
-            dobj.class_id = keep[k].class_id;
-            dobj.mask     = std::move(mask);
-            out.detections.push_back(std::move(dobj));
-        }
+        cv::Mat mask = cv::Mat::zeros(im.proto_h, im.proto_w, CV_8U);
+        cv::Mat bin = m(keep[k].pbox) > 0.0f;   // logit>0 -> CV_8U 0/255
+        bin.copyTo(mask(keep[k].pbox));
+
+        SegDetection dobj;
+        dobj.box      = keep[k].box;
+        dobj.score    = keep[k].score;
+        dobj.class_id = keep[k].class_id;
+        dobj.mask     = std::move(mask);
+        out.detections.push_back(std::move(dobj));
     }
 }
 

@@ -36,6 +36,11 @@ public:
     void get_output_async(const std::string& name, TPinnedVector<float>& buf);
     void sync();
 
+    // Raw device pointer of an output tensor (valid after enqueue+sync, until the
+    // next enqueue) — lets a caller run cuBLAS/CUDA postprocessing on the output
+    // without a device->host copy.
+    void* output_device_ptr(const std::string& name);
+
     cudaStream_t stream() const { return stream_; }
     bool initialized() const { return initialized_; }
 

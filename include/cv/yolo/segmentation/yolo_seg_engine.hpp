@@ -1,6 +1,7 @@
 #pragma once
 
 #include "cv/yolo/segmentation/seg_result.hpp"
+#include "cv/yolo/segmentation/yolo_seg_postprocess.hpp"
 #include "cv/yolo/yolo_inference.hpp"
 #include "cv/yolo/yolo_preprocess.hpp"
 #include "tensorrt/InferenceEngine.h"   // TPinnedVector
@@ -65,14 +66,16 @@ private:
     YoloSegConfig         cfg_;
     YoloInference         infer_;
     YoloPreprocessScratch pre_scratch_;
+    YoloSegPostprocess    post_;
 
     int input_w_ = 0, input_h_ = 0;              // model input (from engine)
     int det_count_ = 0, det_stride_ = 0;         // output0: [det_count_, det_stride_]
     int proto_c_ = 0, proto_h_ = 0, proto_w_ = 0;// output1: [c, h, w]
 
+    // Input + detection tensors round-trip through the host; the prototype
+    // tensor stays on the GPU (postprocess reads it there via cuBLAS).
     TPinnedVector<float> input_buf_;
     TPinnedVector<float> det_buf_;
-    TPinnedVector<float> proto_buf_;
 
     std::atomic<double> pre_ms_{0.0}, inf_ms_{0.0}, post_ms_{0.0};
 

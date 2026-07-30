@@ -639,6 +639,12 @@ public:
         s_logger.log(cudaMemcpyAsync(data, m_outputBuffers[name], byteCount, cudaMemcpyDeviceToHost, stream));
     }
 
+    void* GetOutputDevicePtr(const std::string& name)
+    {
+        auto it = m_outputBuffers.find(name);
+        return (it != m_outputBuffers.end()) ? it->second : nullptr;
+    }
+
     bool Enqueue( cudaStream_t stream )
     {
         if (m_tensorShapes.empty())
@@ -755,6 +761,11 @@ void TRTInferenceEngine::SetInputDataAsync(const std::string& name, const void* 
 void TRTInferenceEngine::GetOutputDataAsync(const std::string& name, void* data, size_t byteCount, cudaStream_t stream)
 {
     m_impl->GetOutputDataAsync(name, data, byteCount, stream);
+}
+
+void* TRTInferenceEngine::GetOutputDevicePtr(const std::string& name)
+{
+    return m_impl->GetOutputDevicePtr(name);
 }
 
 bool TRTInferenceEngine::Enqueue(cudaStream_t stream)

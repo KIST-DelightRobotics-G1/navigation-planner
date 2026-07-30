@@ -1,7 +1,5 @@
 #include "cv/yolo/segmentation/yolo_seg_engine.hpp"
 
-#include "cv/yolo/segmentation/yolo_seg_postprocess.hpp"
-
 #include <chrono>
 #include <iostream>
 
@@ -30,7 +28,14 @@ bool YoloSegEngine::init(const YoloSegConfig& cfg) {
 
     input_buf_.resize(static_cast<size_t>(3) * input_h_ * input_w_);
     det_buf_.resize(static_cast<size_t>(det_count_) * det_stride_);
-    proto_buf_.resize(static_cast<size_t>(proto_c_) * proto_h_ * proto_w_);
+
+    // GPU postprocess (cuBLAS GEMM on the proto tensor, kept on-device) — shares
+    // the inference stream so it runs right after the outputs are ready.
+    if (!post_.init(det_count_, det_stride_, proto_c_, proto_h_, proto_w_,
+                    infer_.stream())) {
+        std::cerr << "[YoloSegEngine] postprocess init failed\n";
+        return false;
+    }
 
     std::cout << "[YoloSegEngine] ready: input " << input_w_ << "x" << input_h_
               << ", det [" << det_count_ << "," << det_stride_ << "]"
@@ -56,22 +61,22 @@ SegResult YoloSegEngine::infer(const cv::Mat& bgr, int64_t stamp_ns) {
     pre_ms_.store(ms_since(t_pre), std::memory_order_relaxed);
 
     // ── inference (generic) ──
+    // Only the detection tensor comes back to the host; the prototype tensor
+    // stays on the GPU for the cuBLAS postprocess below.
     const auto t_inf = clock::now();
     infer_.set_input_async(cfg_.input_name, input_buf_);
     if (!infer_.enqueue()) {
         std::cerr << "[YoloSegEngine] enqueue failed\n";
         return result;
     }
-    infer_.get_output_async(cfg_.det_name,   det_buf_);
-    infer_.get_output_async(cfg_.proto_name, proto_buf_);
+    infer_.get_output_async(cfg_.det_name, det_buf_);
     infer_.sync();
     inf_ms_.store(ms_since(t_inf), std::memory_order_relaxed);
 
-    // ── postprocess (seg-specific) ──
+    // ── postprocess (seg-specific, GPU GEMM) ──
     const auto t_post = clock::now();
-    yolo_seg_postprocess(det_buf_.data(), det_count_, det_stride_,
-                         proto_buf_.data(), proto_c_, proto_h_, proto_w_,
-                         lb, bgr.cols, bgr.rows, cfg_.score_threshold, result);
+    post_.run(det_buf_.data(), infer_.output_device_ptr(cfg_.proto_name),
+              lb, bgr.cols, bgr.rows, cfg_.score_threshold, result);
     post_ms_.store(ms_since(t_post), std::memory_order_relaxed);
 
     return result;

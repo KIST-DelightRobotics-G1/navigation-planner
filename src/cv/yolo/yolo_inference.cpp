@@ -59,4 +59,8 @@ void YoloInference::sync() {
     cudaStreamSynchronize(stream_);
 }
 
+void* YoloInference::output_device_ptr(const std::string& name) {
+    return engine_.GetOutputDevicePtr(name);
+}
+
 } // namespace kist
