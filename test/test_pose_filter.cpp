@@ -9,6 +9,7 @@
 // robot around and the pose starts publishing.
 
 #include "common/config.hpp"
+#include "common/dds_config.hpp"
 #include "kalman_filter/pose_filter.hpp"
 #include "unitree/unitree_odometry_reader.hpp"
 #include "system/uwb_receiver.hpp"   // embedded from kist-ext-sensor-io
@@ -33,7 +34,7 @@ int main(int argc, char** argv) {
 
     const auto unitree_cfg = Config::instance().root()["unitree"];
     const int         domain_id = unitree_cfg["domain_id"].as<int>();
-    const std::string interface = unitree_cfg["network_interface"].as<std::string>();
+    if (!apply_dds_config(Config::instance().root())) return 1;  // NIC + tuning from config/cyclonedds.xml
 
     const auto pf_cfg = Config::instance().root()["pose_filter"];
     const auto options = pose_filter_options_from_yaml(pf_cfg);
@@ -48,16 +49,16 @@ int main(int argc, char** argv) {
     });
 
     auto& odom = UnitreeOdometryReader::instance();
-    if (!uwb.start(domain_id, interface)) return 1;
-    if (!odom.start(domain_id, interface)) return 1;
+    if (!uwb.start(domain_id, "")) return 1;
+    if (!odom.start(domain_id, "")) return 1;
 
     // The filter pulls odom straight from the reader's buffer (no hook).
     filter.start(odom.odom_buf);
 
     std::signal(SIGINT,  [](int) { g_stop = true; });
     std::signal(SIGTERM, [](int) { g_stop = true; });
-    std::printf("[test_pose_filter] domain=%d iface=%s frame=%s - move the robot to calibrate\n",
-                domain_id, interface.c_str(), frame_id.c_str());
+    std::printf("[test_pose_filter] domain=%d frame=%s - move the robot to calibrate\n",
+                domain_id, frame_id.c_str());
 
     while (!g_stop) {
         std::this_thread::sleep_for(std::chrono::seconds(1));

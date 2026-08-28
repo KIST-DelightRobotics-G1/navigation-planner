@@ -9,6 +9,7 @@
 // /tmp/pose_filter_view.png periodically.
 
 #include "common/config.hpp"
+#include "common/dds_config.hpp"
 #include "kalman_filter/pose_filter.hpp"
 #include "unitree/unitree_odometry_reader.hpp"
 #include "system/uwb_receiver.hpp"   // embedded from kist-ext-sensor-io
@@ -47,7 +48,7 @@ int main(int argc, char** argv) {
 
     const auto unitree_cfg = Config::instance().root()["unitree"];
     const int         domain_id = unitree_cfg["domain_id"].as<int>();
-    const std::string interface = unitree_cfg["network_interface"].as<std::string>();
+    if (!apply_dds_config(Config::instance().root())) return 1;  // NIC + tuning from config/cyclonedds.xml
 
     const auto options = pose_filter_options_from_yaml(Config::instance().root()["pose_filter"]);
 
@@ -58,16 +59,16 @@ int main(int argc, char** argv) {
         filter.uwb_buf.SetData(UwbFix{p.stamp_ns, p.x, p.y});
     });
     auto& odom = UnitreeOdometryReader::instance();
-    if (!uwb.start(domain_id, interface)) return 1;
-    if (!odom.start(domain_id, interface)) return 1;
+    if (!uwb.start(domain_id, "")) return 1;
+    if (!odom.start(domain_id, "")) return 1;
     filter.start(odom.odom_buf);
 
     std::signal(SIGINT,  [](int) { g_stop = true; });
     std::signal(SIGTERM, [](int) { g_stop = true; });
 
     const bool has_disp = [] { const char* d = std::getenv("DISPLAY"); return d && d[0]; }();
-    std::printf("[test_pose_filter_viewer] domain=%d iface=%s frame=%s - %s (move the robot to calibrate)\n",
-                domain_id, interface.c_str(), options.frame_id.c_str(),
+    std::printf("[test_pose_filter_viewer] domain=%d frame=%s - %s (move the robot to calibrate)\n",
+                domain_id, options.frame_id.c_str(),
                 has_disp ? "window" : "headless -> /tmp/pose_filter_view.png");
 
     // Fix the view centre on the first datum so the trails stay put in world space.

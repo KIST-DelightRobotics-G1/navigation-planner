@@ -68,6 +68,10 @@ RUN git clone --depth 1 --branch "${CYCLONEDDS_VERSION}" \
     rm -rf /tmp/cyclonedds /tmp/cyclonedds-cxx
 ENV PATH=/opt/cyclonedds/bin:${PATH}
 ENV CYCLONEDDS_HOME=/opt/cyclonedds
+# Route the DDS transport config (NIC + rx socket/defrag tuning) so the camera
+# receiver doesn't drop frames. apply_dds_config() honors this pre-set value.
+# See config/cyclonedds.xml re: the host net.core.rmem_max cap under --network host.
+ENV CYCLONEDDS_URI=file:///workspace/kist-navigation-planner/config/cyclonedds.xml
 
 # ─── source + build ───────────────────────────────────────────────────────────
 # Build context = repo root (minus build/, .git, the SDK via .dockerignore).

@@ -14,6 +14,7 @@
 #include "cv/yolo/instance_segmentation/yolo_inst_seg_engine.hpp"
 #include "system/realsense_receiver.hpp"   // embedded from kist-ext-sensor-io
 #include "common/config.hpp"
+#include "common/dds_config.hpp"            // apply_dds_config (kist-ext-sensor-io)
 
 #include <opencv2/imgproc.hpp>
 #include <opencv2/highgui.hpp>
@@ -86,10 +87,12 @@ int main(int argc, char** argv) {
     std::setvbuf(stdout, nullptr, _IOLBF, 0);
     const std::string config_path = (argc >= 2) ? argv[1] : "config/config.yaml";
     Config::instance().load(config_path);
+    const auto& root = Config::instance().root();
 
-    const auto unitree_cfg = Config::instance().root()["unitree"];
-    const int         domain_id = unitree_cfg["domain_id"].as<int>();
-    const std::string interface = unitree_cfg["network_interface"].as<std::string>();
+    const int domain_id = root["unitree"]["domain_id"].as<int>(0);
+    // Route config/cyclonedds.xml (NIC + rx buffer/defrag tuning) into CycloneDDS.
+    // Must precede any receiver start(), which is then passed an EMPTY interface.
+    if (!apply_dds_config(root)) return 1;
 
     YoloInstSegConfig cfg;
     double      target_fps = 30.0;
@@ -101,7 +104,7 @@ int main(int argc, char** argv) {
     }
 
     RealsenseReceiver rx;
-    if (!rx.start(domain_id, interface, cam_name)) return 1;
+    if (!rx.start(domain_id, "", cam_name)) return 1;   // empty iface — NIC from the DDS xml
 
     // main only wires the frame source + start/stop; the pipeline owns the YOLO
     // instance-seg engine and its worker thread.
@@ -118,8 +121,8 @@ int main(int argc, char** argv) {
     std::signal(SIGINT,  [](int) { g_stop = true; });
     std::signal(SIGTERM, [](int) { g_stop = true; });
     const bool has_disp = [] { const char* e = std::getenv("DISPLAY"); return e && e[0]; }();
-    std::printf("[test_seg_camera] domain=%d iface=%s cap=%.0ffps - %s\n",
-                domain_id, interface.c_str(), target_fps,
+    std::printf("[test_seg_camera] domain=%d cap=%.0ffps - %s\n",
+                domain_id, target_fps,
                 has_disp ? "window (ESC to quit)" : "headless -> /tmp/seg_camera_out.png");
 
     int64_t  last_result_stamp = -1;

@@ -5,6 +5,7 @@
 // once per second. Ctrl-C to stop.
 
 #include "common/config.hpp"
+#include "common/dds_config.hpp"
 #include "pointcloud/pointcloud_processor.hpp"
 #include "unitree/unitree_pointcloud_reader.hpp"
 
@@ -27,7 +28,7 @@ int main(int argc, char** argv) {
 
     const auto unitree_cfg = root["unitree"];
     const auto domain_id   = unitree_cfg["domain_id"].as<int>();
-    const auto interface   = unitree_cfg["network_interface"].as<std::string>();
+    if (!apply_dds_config(Config::instance().root())) return 1;  // NIC + tuning from config/cyclonedds.xml
 
     std::signal(SIGINT, [](int) { g_stop = true; });
 
@@ -38,7 +39,7 @@ int main(int argc, char** argv) {
              pointcloud_processor_options_from_yaml(root["pointcloud_processor"])}](
             UnitreePointCloud& f) { proc.process(f); });
 
-    if (!reader.start(domain_id, interface))
+    if (!reader.start(domain_id, ""))
         return 1;
 
     while (!g_stop) {

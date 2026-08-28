@@ -5,8 +5,11 @@
 unitree:
   # DDS domain id (default 0; change to isolate multiple robots on one network)
   domain_id: 0
-  # Network interface connected to the robot (e.g. eno1, enp0s31f6)
-  network_interface: lo
+  # DDS transport config (XML): the network interface AND the socket-buffer /
+  # defrag tuning live THERE — edit config/cyclonedds.xml to change the NIC.
+  # (Why not here: the SDK ignores CYCLONEDDS_URI when an interface is passed in
+  # code, so the runners route everything through the XML — see common/dds_config.hpp.)
+  dds_config: config/cyclonedds.xml
 
 pose_filter:
   # UWB + odometry EKF fusion (UwbOdomAEKF). Output frame + filter tuning.

@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  CycloneDDS transport config for the navigation pipeline (a DDS CONSUMER: it
+  subscribes to the camera / LiDAR / odom / UWB streams, doesn't publish them).
+
+  Routed via CYCLONEDDS_URI by kist::apply_dds_config() — which also requires the
+  runners to pass an EMPTY network interface, since a non-empty one makes the
+  unitree SDK build its own DDS config and silently discard this whole file. The
+  NIC is therefore named HERE.
+
+  Reliability is intentionally left at the reader default (BEST_EFFORT): for
+  real-time navigation the freshest frame matters, not retransmission of stale
+  ones (RELIABLE would add latency / head-of-line blocking). The recording side
+  (kist-data-collector) is the one that wants RELIABLE; navigation does not.
+
+  These are the receive-side knobs that help a BEST_EFFORT reader survive large
+  camera frames (measured against the ext-sensor-io transmitter):
+   - SocketReceiveBufferSize: kernel UDP buffer. Depth frames (~190 KB RVL) from
+     several cameras land together; small buffers shed fragments. The OS caps it
+     at net.core.rmem_max — raise that on the host or the request is clamped:
+         sudo sysctl -w net.core.rmem_max=16777216   (persist in /etc/sysctl.d)
+   - DefragUnreliableMaxSamples: best-effort defrag slots (default 4!) — a depth
+     frame is ~130 fragments and camera bursts interleave, so 4 drops most.
+   - DeliveryQueueMaxSamples: the delivery queue all readers share (default 256)
+     — high-rate streams + camera bursts overflow it.
+-->
+<CycloneDDS xmlns="https://cdds.io/config">
+  <Domain id="any">
+    <General>
+      <Interfaces>
+        <!-- NIC toward the DDS peers on THIS machine: robot-LAN interface on the
+             onboard PC (e.g. eth0, eno2); "lo" for same-machine testing. -->
+        <NetworkInterface name="eno2" priority="default" multicast="default"/>
+      </Interfaces>
+    </General>
+    <Internal>
+      <SocketReceiveBufferSize min="16MB"/>
+      <DefragUnreliableMaxSamples>64</DefragUnreliableMaxSamples>
+      <DeliveryQueueMaxSamples>1024</DeliveryQueueMaxSamples>
+    </Internal>
+  </Domain>
+</CycloneDDS>

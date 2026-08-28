@@ -8,6 +8,7 @@
 
 #include "system/realsense_receiver.hpp"   // embedded from kist-ext-sensor-io
 #include "common/config.hpp"
+#include "common/dds_config.hpp"            // apply_dds_config (kist-ext-sensor-io)
 
 #include <opencv2/imgcodecs.hpp>
 
@@ -24,21 +25,20 @@ int main(int argc, char** argv) {
 
     Config::instance().load(config_path);
     const auto& root = Config::instance().root();
-    const auto unitree      = root["unitree"];
-    const int domain_id     = unitree["domain_id"].as<int>(0);
-    const std::string iface = unitree["network_interface"].as<std::string>("lo");
+    const int domain_id = root["unitree"]["domain_id"].as<int>(0);
+    if (!apply_dds_config(root)) return 1;   // NIC + rx tuning from config/cyclonedds.xml
 
     std::string cam_name = "head";
     if (const auto cv = root["cv_inference"]) cam_name = cv["camera"].as<std::string>(cam_name);
     if (argc >= 4) cam_name = argv[3];
 
     RealsenseReceiver rx;
-    if (!rx.start(domain_id, iface, cam_name)) {
+    if (!rx.start(domain_id, "", cam_name)) {   // empty iface — NIC from the DDS xml
         std::fprintf(stderr, "[snapshot] receiver start failed\n");
         return 1;
     }
-    std::printf("[snapshot] waiting for a color frame on '%s' (domain=%d iface=%s) ...\n",
-                cam_name.c_str(), domain_id, iface.c_str());
+    std::printf("[snapshot] waiting for a color frame on '%s' (domain=%d) ...\n",
+                cam_name.c_str(), domain_id);
 
     // Wait up to ~5s for the first decoded color frame.
     for (int i = 0; i < 500; ++i) {

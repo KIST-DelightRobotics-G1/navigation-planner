@@ -8,6 +8,7 @@
 // reader must not demand Reliable.
 
 #include "common/config.hpp"
+#include "common/dds_config.hpp"
 #include "unitree/unitree_odometry_reader.hpp"
 
 #include <atomic>
@@ -28,12 +29,12 @@ int main(int argc, char** argv) {
 
     const auto unitree_cfg = Config::instance().root()["unitree"];
     const auto domain_id   = unitree_cfg["domain_id"].as<int>();
-    const auto interface   = unitree_cfg["network_interface"].as<std::string>();
+    if (!apply_dds_config(Config::instance().root())) return 1;  // NIC + tuning from config/cyclonedds.xml
 
     std::signal(SIGINT, [](int) { g_stop = true; });
 
     auto& reader = UnitreeOdometryReader::instance();
-    if (!reader.start(domain_id, interface))
+    if (!reader.start(domain_id, ""))
         return 1;
 
     // Receive rate is measured by polling for stamp changes at 1ms —
