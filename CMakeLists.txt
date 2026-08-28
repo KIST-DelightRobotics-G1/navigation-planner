@@ -118,6 +118,13 @@ add_executable(test_unitree_pointcloud_reader test/test_unitree_pointcloud_reade
 target_link_libraries(test_unitree_pointcloud_reader
     PRIVATE unitree_pointcloud_reader pointcloud_processing)
 
+# Visual variant (OpenCV): top-down bird's-eye projection of the LiDAR cloud,
+# colored by height. Window when DISPLAY is set, else /tmp/pointcloud_view.png.
+add_executable(test_pointcloud_viewer test/test_pointcloud_viewer.cpp)
+target_link_libraries(test_pointcloud_viewer
+    PRIVATE unitree_pointcloud_reader pointcloud_processing ${OpenCV_LIBS})
+target_include_directories(test_pointcloud_viewer PRIVATE ${OpenCV_INCLUDE_DIRS})
+
 add_executable(test_unitree_odometry_reader test/test_unitree_odometry_reader.cpp)
 target_link_libraries(test_unitree_odometry_reader
     PRIVATE unitree_odometry_reader yaml-cpp)
