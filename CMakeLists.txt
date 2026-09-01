@@ -182,6 +182,14 @@ if(EXISTS "${KIST_EXT_SENSOR_IO}/CMakeLists.txt")
             PRIVATE cv_yolo realsense_receiver yaml-cpp ${OpenCV_LIBS})
         set_target_properties(test_sem_camera PROPERTIES
             CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
+
+        # Depth+semantic fusion: one receiver -> YOLO class map + deprojected
+        # depth -> labeled 3D cloud (fusion/depth_fusion.hpp), shown top-down.
+        add_executable(test_fusion_viewer test/test_fusion_viewer.cpp)
+        target_link_libraries(test_fusion_viewer
+            PRIVATE cv_yolo realsense_receiver yaml-cpp ${OpenCV_LIBS})
+        set_target_properties(test_fusion_viewer PROPERTIES
+            CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
         # One-shot frame grab from the camera (clean frame -> disk) for model
         # spikes / offline debugging.
         add_executable(test_camera_snapshot test/test_camera_snapshot.cpp)

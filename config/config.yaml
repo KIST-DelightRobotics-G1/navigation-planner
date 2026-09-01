@@ -52,6 +52,29 @@ cv_inference:
   instance_onnx: models/yolo26l-seg.onnx   # YOLO26 instance-seg (proto masks)
   semantic_onnx: models/yolo26l-sem.onnx   # YOLO26 semantic-seg (dense class map)
 
+fusion:
+  # depth + semantic mask -> labeled 3D cloud (fusion/depth_fusion.hpp), lifted
+  # into the robot base frame by the camera extrinsics below.
+
+  # Camera -> robot-base mount pose. ESTIMATE — tune live in test_fusion_viewer
+  # (w/s pitch, e/d height) and copy the printed values back here. Camera optical
+  # frame (+X right, +Y down, +Z forward) -> robot base (+X forward, +Y left, +Z up).
+  camera_extrinsics:
+    # Tuned live in test_fusion_viewer against the head D435 (floor flat on z=0).
+    x: 0.0            # camera position in the robot frame (m, +forward)
+    y: 0.0            # (m, +left)
+    height: 1.24      # camera height above the floor (z, m)
+    pitch_deg: 45.0   # downward tilt from horizontal (positive = looking down)
+    yaw_deg: 0.0
+    roll_deg: 0.0
+
+  height_filter:
+    # Keep the obstacle band, drop floor + overhead. Toggle live with the
+    # viewer's 'x' key; on by default now that the tilt is calibrated.
+    enabled: true
+    min_z: 0.2
+    max_z: 1.8
+
 pointcloud_processor:
   # Runs on the reader's DDS receive thread (set_processor hook):
   # transform first, then filter on the transformed coordinates.
