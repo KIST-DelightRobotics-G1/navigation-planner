@@ -44,8 +44,8 @@ bool YoloInstSegEngine::init(const Config& cfg) {
     return true;
 }
 
-InstSegResult YoloInstSegEngine::infer(const cv::Mat& bgr, int64_t stamp_ns) {
-    InstSegResult result;
+InstSegFrame YoloInstSegEngine::infer(const cv::Mat& bgr, int64_t stamp_ns) {
+    InstSegFrame result;
     if (!initialized_ || bgr.empty()) return result;
     result.stamp_ns = stamp_ns;
 

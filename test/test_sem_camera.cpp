@@ -1,7 +1,7 @@
 // Live camera semantic segmentation (robot LAN + RealSense transmitter running):
 //   ./test_sem_camera [config_path]
 // Wires the embedded RealsenseReceiver (H.264 color over DDS) into a
-// YoloPipeline<YoloSemSegEngine>, which runs YOLO26-sem on its own worker thread
+// YoloSemPipeline, which runs YOLO26-sem on its own worker thread
 // (latest-wins) producing a dense per-pixel class map, and overlays a colorized
 // class map on the live video. Prints the fps + top class ids (by pixel share)
 // once per second (names TBD until we confirm the model's class set). With a
@@ -53,7 +53,7 @@ const cv::Mat& class_palette() {
 
 // Colorized class map cropped to the letterbox content region and resized to the
 // original frame, then blended in.
-void draw(cv::Mat& vis, const cv::Mat& base, const SemSegResult& r) {
+void draw(cv::Mat& vis, const cv::Mat& base, const SemSegFrame& r) {
     if (r.class_map.empty()) { base.copyTo(vis); return; }
 
     const int nw = int(std::round(r.width * r.scale));
@@ -95,7 +95,7 @@ int main(int argc, char** argv) {
     RealsenseReceiver rx;
     if (!rx.start(domain_id, "", cam_name)) return 1;   // empty iface — NIC from the DDS xml
 
-    YoloPipeline<YoloSemSegEngine> pipe;
+    YoloSemPipeline pipe;
     if (!pipe.start(cfg, target_fps, [&](cv::Mat& bgr, int64_t& stamp) -> bool {
         auto cf = rx.color().GetData();
         if (!cf || cf->empty()) return false;

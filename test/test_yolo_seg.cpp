@@ -66,7 +66,7 @@ int main(int argc, char** argv) {
     // Timed inference (a warmup pass first so the timing excludes lazy setup).
     engine.infer(img);
     const auto t0 = std::chrono::steady_clock::now();
-    InstSegResult r = engine.infer(img, 1);
+    InstSegFrame r = engine.infer(img, 1);
     const auto t1 = std::chrono::steady_clock::now();
     const double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
     std::printf("[test_yolo_seg] %zu detections in %.1f ms (%.1f fps)\n",

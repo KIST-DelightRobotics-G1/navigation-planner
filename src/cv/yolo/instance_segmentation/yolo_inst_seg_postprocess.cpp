@@ -74,7 +74,7 @@ bool YoloInstSegPostprocess::init(int det_count, int det_stride,
 
 void YoloInstSegPostprocess::run(const float* det_host, const void* proto_device,
                                  const LetterboxTransform& lb, int orig_w, int orig_h,
-                                 float score_threshold, InstSegResult& out) {
+                                 float score_threshold, InstSegFrame& out) {
     auto& im = *impl_;
 
     out.width  = orig_w;       out.height = orig_h;

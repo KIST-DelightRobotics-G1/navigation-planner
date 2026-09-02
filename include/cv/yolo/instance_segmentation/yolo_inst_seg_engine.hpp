@@ -1,8 +1,9 @@
 #pragma once
 
 #include "cv/yolo/instance_segmentation/yolo_inst_seg_postprocess.hpp"
-#include "cv/yolo/instance_segmentation/yolo_inst_seg_result.hpp"
+#include "cv/yolo/instance_segmentation/yolo_inst_seg_frame.hpp"
 #include "cv/yolo/yolo_inference.hpp"
+#include "cv/yolo/yolo_pipeline.hpp"
 #include "cv/yolo/yolo_preprocess.hpp"
 #include "cv/yolo/yolo_timings.hpp"
 #include "tensorrt/InferenceEngine.h"   // TPinnedVector
@@ -36,15 +37,15 @@ class YoloInstSegEngine {
 public:
     // Pipeline plumbing (YoloPipeline<Engine> reads these).
     using Config = YoloInstSegConfig;
-    using Result = InstSegResult;
+    using Result = InstSegFrame;
 
     YoloInstSegEngine() = default;
 
     bool init(const Config& cfg);
 
     // Runs one frame. stamp_ns is copied into the result. Boxes are in original-
-    // image pixels; masks are at proto resolution (see InstSegResult).
-    InstSegResult infer(const cv::Mat& bgr, int64_t stamp_ns = 0);
+    // image pixels; masks are at proto resolution (see InstSegFrame).
+    InstSegFrame infer(const cv::Mat& bgr, int64_t stamp_ns = 0);
 
     bool initialized() const { return initialized_; }
     YoloStageTimings timings() const {
@@ -72,5 +73,10 @@ private:
 
     bool initialized_ = false;
 };
+
+// Ready-to-use pipeline for this task. Hides the YoloPipeline<Engine> template
+// (and its generic Result slot) from callers — a consumer just sees a worker it
+// start/stop()s whose result() is a DataBuffer<InstSegFrame>.
+using YoloInstPipeline = YoloPipeline<YoloInstSegEngine>;
 
 } // namespace kist

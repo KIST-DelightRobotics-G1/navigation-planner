@@ -54,7 +54,7 @@ cv::Scalar color_for(int id) {
     return cv::Scalar(c[0], c[1], c[2]);
 }
 
-void draw(cv::Mat& vis, const cv::Mat& base, const InstSegResult& r) {
+void draw(cv::Mat& vis, const cv::Mat& base, const InstSegFrame& r) {
     for (const auto& d : r.detections) {
         const cv::Scalar col = color_for(d.class_id);
         cv::Rect box = d.box & cv::Rect(0, 0, vis.cols, vis.rows);
@@ -108,7 +108,7 @@ int main(int argc, char** argv) {
 
     // main only wires the frame source + start/stop; the pipeline owns the YOLO
     // instance-seg engine and its worker thread.
-    YoloPipeline<YoloInstSegEngine> pipe;
+    YoloInstPipeline pipe;
     if (!pipe.start(cfg, target_fps, [&](cv::Mat& bgr, int64_t& stamp) -> bool {
         auto cf = rx.color().GetData();
         if (!cf || cf->empty()) return false;

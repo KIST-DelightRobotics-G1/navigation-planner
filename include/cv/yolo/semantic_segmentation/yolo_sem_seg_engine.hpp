@@ -1,7 +1,8 @@
 #pragma once
 
-#include "cv/yolo/semantic_segmentation/yolo_sem_seg_result.hpp"
+#include "cv/yolo/semantic_segmentation/yolo_sem_seg_frame.hpp"
 #include "cv/yolo/yolo_inference.hpp"
+#include "cv/yolo/yolo_pipeline.hpp"
 #include "cv/yolo/yolo_preprocess.hpp"
 #include "cv/yolo/yolo_timings.hpp"
 #include "tensorrt/InferenceEngine.h"   // TPinnedVector
@@ -32,13 +33,13 @@ class YoloSemSegEngine {
 public:
     // Pipeline plumbing (YoloPipeline<Engine> reads these).
     using Config = YoloSemSegConfig;
-    using Result = SemSegResult;
+    using Result = SemSegFrame;
 
     YoloSemSegEngine() = default;
 
     bool init(const Config& cfg);
 
-    SemSegResult infer(const cv::Mat& bgr, int64_t stamp_ns = 0);
+    SemSegFrame infer(const cv::Mat& bgr, int64_t stamp_ns = 0);
 
     bool initialized() const { return initialized_; }
     YoloStageTimings timings() const {
@@ -62,5 +63,10 @@ private:
 
     bool initialized_ = false;
 };
+
+// Ready-to-use pipeline for this task. Hides the YoloPipeline<Engine> template
+// (and its generic Result slot) from callers — a consumer just sees a worker it
+// start/stop()s whose result() is a DataBuffer<SemSegFrame>.
+using YoloSemPipeline = YoloPipeline<YoloSemSegEngine>;
 
 } // namespace kist

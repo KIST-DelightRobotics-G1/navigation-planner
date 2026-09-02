@@ -12,7 +12,7 @@ namespace kist {
 // just the map plus the letterbox transform that maps an original-image pixel
 // into it (for depth fusion / overlay). No upsample here: consumers sample only
 // the pixels they need.
-struct SemSegResult {
+struct SemSegFrame {
     int64_t stamp_ns = 0;              // carried through from the input frame
     int     width = 0, height = 0;     // original-image size
 

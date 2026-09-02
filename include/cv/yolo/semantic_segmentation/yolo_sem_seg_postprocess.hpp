@@ -1,6 +1,6 @@
 #pragma once
 
-#include "cv/yolo/semantic_segmentation/yolo_sem_seg_result.hpp"
+#include "cv/yolo/semantic_segmentation/yolo_sem_seg_frame.hpp"
 #include "cv/yolo/yolo_preprocess.hpp"   // LetterboxTransform
 
 #include <cstdint>
@@ -13,6 +13,6 @@ namespace kist {
 // so consumers can map original px -> class-map px. The caller sets out.stamp_ns.
 void yolo_sem_seg_postprocess(const uint8_t* class_map_host, int map_w, int map_h,
                               const LetterboxTransform& lb, int orig_w, int orig_h,
-                              SemSegResult& out);
+                              SemSegFrame& out);
 
 } // namespace kist

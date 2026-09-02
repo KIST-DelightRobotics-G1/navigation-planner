@@ -34,8 +34,8 @@ bool YoloSemSegEngine::init(const Config& cfg) {
     return true;
 }
 
-SemSegResult YoloSemSegEngine::infer(const cv::Mat& bgr, int64_t stamp_ns) {
-    SemSegResult result;
+SemSegFrame YoloSemSegEngine::infer(const cv::Mat& bgr, int64_t stamp_ns) {
+    SemSegFrame result;
     if (!initialized_ || bgr.empty()) return result;
     result.stamp_ns = stamp_ns;
 

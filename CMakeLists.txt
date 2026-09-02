@@ -183,11 +183,23 @@ if(EXISTS "${KIST_EXT_SENSOR_IO}/CMakeLists.txt")
         set_target_properties(test_sem_camera PROPERTIES
             CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
 
-        # Depth+semantic fusion: one receiver -> YOLO class map + deprojected
-        # depth -> labeled 3D cloud (fusion/depth_fusion.hpp), shown top-down.
+        # Labeled-cloud generator: deproject depth + attach the semantic class +
+        # transform to the robot frame, on a worker thread. Needs ext's DepthFrame
+        # header (via realsense_receiver) so it lives inside this ext-gated block.
+        add_library(labeled_cloud_generator STATIC
+            src/labeled_cloud/labeled_cloud.cpp
+            src/labeled_cloud/camera_extrinsics.cpp
+            src/labeled_cloud/labeled_cloud_generator.cpp)
+        target_include_directories(labeled_cloud_generator PUBLIC include ${OpenCV_INCLUDE_DIRS})
+        target_link_libraries(labeled_cloud_generator PUBLIC realsense_receiver ${OpenCV_LIBS})
+        set_target_properties(labeled_cloud_generator PROPERTIES
+            CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
+
+        # Depth+semantic fusion viewer: one receiver -> YOLO class map + the
+        # labeled-cloud worker -> robot-frame labeled cloud, shown top-down/side.
         add_executable(test_fusion_viewer test/test_fusion_viewer.cpp)
         target_link_libraries(test_fusion_viewer
-            PRIVATE cv_yolo realsense_receiver yaml-cpp ${OpenCV_LIBS})
+            PRIVATE labeled_cloud_generator cv_yolo realsense_receiver yaml-cpp ${OpenCV_LIBS})
         set_target_properties(test_fusion_viewer PROPERTIES
             CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
         # One-shot frame grab from the camera (clean frame -> disk) for model

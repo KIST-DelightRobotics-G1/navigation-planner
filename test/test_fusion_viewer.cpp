@@ -2,11 +2,11 @@
 // applied), for tuning the camera mount pose live.
 //   ./test_fusion_viewer [config_path]        (default config/config.yaml)
 // ONE RealsenseReceiver feeds both paths:
-//   color -> YoloPipeline<YoloSemSegEngine> -> dense class map (SemSegResult)
+//   color -> YoloSemPipeline -> dense class map (SemSegFrame)
 //   depth -> DepthFrame (color intrinsics, aligned to color)
-// Each cycle fuse_depth_semantic() deprojects depth into a labeled cloud
-// (camera frame), then transform_cloud() lifts it into the robot base frame
-// using the config's (estimated) extrinsics. Two panels, each point colored by
+// A LabeledCloudGenerator worker thread does the fusion (deproject depth + label
+// + transform to the robot frame); main only retunes the mount, reads the latest
+// LabeledCloud off its buffer, and renders. Two panels, each point colored by
 // its semantic class:
 //   TOP  — top-down X-Y (obstacle layout): +X forward up, +Y left left
 //   SIDE — elevation X-Z (tilt tuning):    +X forward right, +Z up up
@@ -17,8 +17,9 @@
 // Tuning goal: in SIDE, make the floor lie flat ALONG the white z=0 line.
 // With a DISPLAY it opens a window; headless it writes /tmp/fusion_view.png.
 
-#include "fusion/depth_fusion.hpp"
-#include "fusion/camera_extrinsics.hpp"
+#include "labeled_cloud/labeled_cloud_generator.hpp"
+#include "labeled_cloud/labeled_cloud.hpp"
+#include "labeled_cloud/camera_extrinsics.hpp"
 #include "cv/yolo/yolo_pipeline.hpp"
 #include "cv/yolo/semantic_segmentation/yolo_sem_seg_engine.hpp"
 #include "system/realsense_receiver.hpp"   // embedded from kist-ext-sensor-io
@@ -176,7 +177,7 @@ int main(int argc, char** argv) {
     RealsenseReceiver rx;
     if (!rx.start(domain_id, "", cam_name)) return 1;   // empty iface — NIC from the DDS xml
 
-    YoloPipeline<YoloSemSegEngine> pipe;
+    YoloSemPipeline pipe;
     if (!pipe.start(cfg, target_fps, [&](cv::Mat& bgr, int64_t& stamp) -> bool {
         auto cf = rx.color().GetData();
         if (!cf || cf->empty()) return false;
@@ -194,25 +195,27 @@ int main(int argc, char** argv) {
                            "z/c lateral  t/g forward  x filter  0 reset  ESC quit)"
                          : "headless -> /tmp/fusion_view.png");
 
-    LabeledCloud cam_cloud, robot_cloud;
-    int64_t last_stamp = -1;
-    int     fused_n = 0, fps = 0;
-    auto    window = std::chrono::steady_clock::now();
+    // Fusion runs on its own worker thread; main only tunes, reads, renders.
+    LabeledCloudConfig gcfg;
+    gcfg.stride     = kStride;
+    gcfg.extrinsics = make_camera_extrinsics(v.x, v.y, v.height, v.pitch, v.yaw, v.roll);
+    LabeledCloudGenerator gen;
+    if (!gen.start(rx.depth(), pipe.result(), gcfg)) return 1;
+
+    const LabeledCloud empty;
+    uint64_t last_processed = 0;
+    int      fps = 0;
+    auto     window = std::chrono::steady_clock::now();
 
     while (!g_stop) {
-        auto df  = rx.depth().GetData();
-        auto seg = pipe.result().GetData();
-        if (df && !df->empty() && df->stamp_ns != last_stamp) {
-            last_stamp = df->stamp_ns;
-            fuse_depth_semantic(*df, seg ? *seg : SemSegResult{}, cam_cloud, kStride);
-            ++fused_n;
-        }
-        const auto extr = make_camera_extrinsics(v.x, v.y, v.height, v.pitch, v.yaw, v.roll);
-        transform_cloud(cam_cloud, extr, robot_cloud);
+        // Live retune (cheap; the worker picks it up on its next cycle).
+        gen.set_extrinsics(make_camera_extrinsics(v.x, v.y, v.height, v.pitch, v.yaw, v.roll));
+        auto cloudp = gen.result().GetData();
+        const LabeledCloud& rc = cloudp ? *cloudp : empty;
 
         if (has_disp) {
             cv::imshow("depth+semantic fusion (robot frame)",
-                       render(robot_cloud, v, int(robot_cloud.size()), fps));
+                       render(rc, v, int(rc.size()), fps));
             const int k = cv::waitKey(30);
             if (k == 27) break;                              // ESC quit
             bool ch = true;
@@ -242,15 +245,18 @@ int main(int argc, char** argv) {
 
         const auto now = std::chrono::steady_clock::now();
         if (now - window >= std::chrono::seconds(1)) {
-            window = now; fps = fused_n; fused_n = 0;
+            window = now;
+            const uint64_t processed = gen.frames_processed();
+            fps = int(processed - last_processed);
+            last_processed = processed;
             std::printf("  %zu pts  %d fps   (h=%.2f pitch=%.1f filter=%s)\n",
-                        robot_cloud.size(), fps, v.height, v.pitch, v.filter?"on":"off");
+                        rc.size(), fps, v.height, v.pitch, v.filter?"on":"off");
             if (!has_disp)
-                cv::imwrite("/tmp/fusion_view.png",
-                            render(robot_cloud, v, int(robot_cloud.size()), fps));
+                cv::imwrite("/tmp/fusion_view.png", render(rc, v, int(rc.size()), fps));
         }
     }
 
+    gen.stop();
     pipe.stop();
     rx.stop();
     return 0;

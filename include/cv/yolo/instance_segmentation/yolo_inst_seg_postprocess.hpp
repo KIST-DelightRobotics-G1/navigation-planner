@@ -1,6 +1,6 @@
 #pragma once
 
-#include "cv/yolo/instance_segmentation/yolo_inst_seg_result.hpp"
+#include "cv/yolo/instance_segmentation/yolo_inst_seg_frame.hpp"
 #include "cv/yolo/yolo_preprocess.hpp"   // LetterboxTransform
 
 #include <memory>
@@ -11,7 +11,7 @@ typedef struct CUstream_st* cudaStream_t;
 namespace kist {
 
 // NMS-free YOLO instance-seg postprocess: decode raw model outputs into an
-// InstSegResult, with the coeff x proto GEMM run on the GPU (cuBLAS). The
+// InstSegFrame, with the coeff x proto GEMM run on the GPU (cuBLAS). The
 // prototype tensor stays on the device (no device->host copy); only the small
 // detection tensor is on the host (for the score filter) and only the resulting
 // per-instance mask logits come back. Masks are kept at PROTO resolution
@@ -37,7 +37,7 @@ public:
     // out.stamp_ns.
     void run(const float* det_host, const void* proto_device,
              const LetterboxTransform& lb, int orig_w, int orig_h,
-             float score_threshold, InstSegResult& out);
+             float score_threshold, InstSegFrame& out);
 
 private:
     struct Impl;
