@@ -202,6 +202,27 @@ if(EXISTS "${KIST_EXT_SENSOR_IO}/CMakeLists.txt")
             PRIVATE labeled_cloud_generator cv_yolo realsense_receiver yaml-cpp ${OpenCV_LIBS})
         set_target_properties(test_fusion_viewer PROPERTIES
             CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
+
+        # Occupancy grid: fuse the LiDAR cloud + the labeled camera cloud into a
+        # probabilistic semantic grid (occupancy_grid.hpp). Depends on both the
+        # labeled-cloud and the LiDAR reader libs, so it lives here too.
+        add_library(occupancy_grid STATIC
+            src/occupancy_grid/occupancy_grid.cpp
+            src/occupancy_grid/occupancy_grid_builder.cpp)
+        target_include_directories(occupancy_grid PUBLIC include ${OpenCV_INCLUDE_DIRS})
+        target_link_libraries(occupancy_grid
+            PUBLIC labeled_cloud_generator unitree_pointcloud_reader)
+        set_target_properties(occupancy_grid PROPERTIES
+            CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
+
+        # Full-stack viewer: camera(YOLO+depth) + LiDAR -> fused occupancy grid.
+        add_executable(test_occupancy_grid_viewer test/test_occupancy_grid_viewer.cpp)
+        target_link_libraries(test_occupancy_grid_viewer
+            PRIVATE occupancy_grid labeled_cloud_generator cv_yolo realsense_receiver
+                    unitree_pointcloud_reader unitree_odometry_reader pointcloud_processing
+                    pose_filter uwb_receiver yaml-cpp ${OpenCV_LIBS})
+        set_target_properties(test_occupancy_grid_viewer PROPERTIES
+            CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
         # One-shot frame grab from the camera (clean frame -> disk) for model
         # spikes / offline debugging.
         add_executable(test_camera_snapshot test/test_camera_snapshot.cpp)

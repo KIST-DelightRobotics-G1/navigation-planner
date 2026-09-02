@@ -72,8 +72,33 @@ fusion:
     # Keep the obstacle band, drop floor + overhead. Toggle live with the
     # viewer's 'x' key; on by default now that the tilt is calibrated.
     enabled: true
-    min_z: 0.2
+    min_z: 0.4
     max_z: 1.8
+
+occupancy_grid:
+  # Probabilistic semantic grid fusing the LiDAR + labeled camera clouds.
+  # Robot-centered, top-down. P(occ) via log-odds; class via camera votes.
+  half_extent_m: 5.0     # grid covers [-5, +5] m in X and Y
+  resolution_m: 0.05     # 5cm cells -> 200x200
+  min_z: 0.2             # obstacle height band (robot frame)
+  max_z: 1.8
+
+  # Inverse sensor model — log-odds added per hit (how much each sensor is
+  # trusted). Camera trust falls from _near to _far as range -> cam_d_max, since
+  # far stereo depth is noisy. LiDAR is a flat, higher trust.
+  l_hit_lidar: 0.85
+  l_hit_cam_near: 1.10
+  l_hit_cam_far: 0.20
+  cam_d_max: 4.0
+
+  # Temporal decay toward P=0.5 (old hits fade). A cell decays fast when its
+  # class is dynamic (people move -> short memory, no smear trail), slow otherwise
+  # (walls persist -> long memory). Higher = longer memory.
+  decay_static: 0.98
+  decay_dynamic: 0.85
+  dynamic_classes: [0]   # COCO class ids treated as dynamic (0 = person)
+
+  occ_threshold: 0.65    # P(occ) above which a cell reads "occupied"
 
 pointcloud_processor:
   # Runs on the reader's DDS receive thread (set_processor hook):
