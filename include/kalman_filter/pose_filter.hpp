@@ -28,6 +28,16 @@ struct PoseFilterOptions {
     // the gate. Default matches ext-sensor-io's UwbSubscriber watchdog cadence
     // (10 missed fixes at 10Hz).
     double            uwb_timeout_ms = 1000.0;
+
+    // Yaw-bias persistence. The calibrated bias is saved to yaw_state_file on
+    // stop(). yaw_init=true (default) ignores any saved bias and recalibrates
+    // from motion every run. yaw_init=false reuses the saved bias to skip the
+    // drive-to-calibrate step — only valid when the robot's odom is continuous
+    // across the restart (no reboot, and it didn't rotate while the process was
+    // down). Empty yaw_state_file disables persistence.
+    bool              yaw_init = true;
+    std::string       yaw_state_file;
+
     UwbOdomAEKFParams ekf;
 };
 
@@ -94,6 +104,12 @@ private:
     UwbOdomAEKF ekf_;
     std::string frame_id_;
     double      uwb_timeout_ms_;
+
+    // Yaw-bias persistence (see PoseFilterOptions).
+    std::string yaw_state_file_;
+    bool        have_seed_ = false;   // a saved bias is queued for the next init
+    double      seed_b_theta_ = 0.0;  // rad
+    double      seed_var_ = 0.0;      // rad^2 — small -> immediately calibrated
 
     DataBuffer<UnitreeOdometry>* odom_src_ = nullptr;
     int64_t last_odom_stamp_ = -1;

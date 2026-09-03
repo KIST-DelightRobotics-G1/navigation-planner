@@ -22,6 +22,14 @@ pose_filter:
   # UWB outage. 0 disables. Matches the UWB subscriber's stale cadence.
   uwb_timeout_ms: 1000
 
+  # Yaw-bias calibration persistence. The calibrated bias is saved to
+  # yaw_state_file on shutdown. yaw_init: true (default) ignores it and
+  # recalibrates from motion each run — safe. false reuses the saved bias to
+  # skip the drive-to-calibrate step, valid ONLY if the robot's odom is
+  # continuous across the restart (no reboot, didn't rotate while off).
+  yaw_init: true
+  yaw_state_file: state/pose_yaw_bias.txt
+
   # Process noise (Q)
   q_xy_m2_per_m: 0.001          # x/y process noise (m^2 per m travelled)
   q_bias_rad2_per_step: 1.0e-9  # yaw-bias random walk per step
@@ -73,7 +81,7 @@ fusion:
     # viewer's 'x' key; on by default now that the tilt is calibrated.
     enabled: true
     min_z: 0.4
-    max_z: 1.8
+    max_z: 10.0
 
 occupancy_grid:
   # Probabilistic semantic grid fusing the LiDAR + labeled camera clouds.
@@ -125,6 +133,6 @@ pointcloud_processor:
     max_y:  10.0
     enable_z: true    # keep the obstacle band, drop floor and ceiling
     min_z:  0.3
-    max_z:  1.5
+    max_z:  10.0
     enable_radius: true
     min_radius: 0.5   # drop robot-body returns around the origin (XY

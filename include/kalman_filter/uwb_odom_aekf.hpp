@@ -63,7 +63,12 @@ public:
 
     // Seed the filter at a UWB fix. b_theta starts at 0 with full (pi^2)
     // uncertainty and converges from motion. odom_yaw feeds global_yaw output.
-    void initialize(double x_m, double y_m, double odom_yaw_rad = 0.0);
+    // A remembered yaw bias can be seeded instead: pass b_theta_rad plus its
+    // variance (rad^2) — a small variance makes yaw_calibrated() true at once,
+    // skipping the drive-to-calibrate step (only valid if odom is continuous).
+    // b_theta_var_rad2 < 0 keeps the default full uncertainty.
+    void initialize(double x_m, double y_m, double odom_yaw_rad = 0.0,
+                    double b_theta_rad = 0.0, double b_theta_var_rad2 = -1.0);
 
     // Back to the pre-initialize state; predict/update are ignored until the
     // next initialize().

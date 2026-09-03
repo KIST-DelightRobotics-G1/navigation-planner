@@ -81,3 +81,6 @@ CLAUDE.md
 # vendored
 thirdparty/unitree_sdk2/
 build/
+
+# runtime state (persisted yaw bias, etc.)
+state/

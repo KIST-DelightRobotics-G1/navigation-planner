@@ -36,9 +36,11 @@ UwbOdomAEKFParams uwb_odom_aekf_params_from_yaml(const YAML::Node& section) {
 
 UwbOdomAEKF::UwbOdomAEKF(UwbOdomAEKFParams params) : p_(params) { reset(); }
 
-void UwbOdomAEKF::initialize(double x_m, double y_m, double odom_yaw_rad) {
-    x_ << x_m, y_m, 0.0;
-    P_ = Eigen::Vector3d(p_.p_init_xy_m2, p_.p_init_xy_m2, p_.p_init_bias_rad2).asDiagonal();
+void UwbOdomAEKF::initialize(double x_m, double y_m, double odom_yaw_rad,
+                             double b_theta_rad, double b_theta_var_rad2) {
+    x_ << x_m, y_m, b_theta_rad;
+    const double bvar = (b_theta_var_rad2 >= 0.0) ? b_theta_var_rad2 : p_.p_init_bias_rad2;
+    P_ = Eigen::Vector3d(p_.p_init_xy_m2, p_.p_init_xy_m2, bvar).asDiagonal();
     R_ = Eigen::Vector2d(p_.r_init_m2, p_.r_init_m2).asDiagonal();
     n_updates_    = 0;
     sh_step_      = 0;

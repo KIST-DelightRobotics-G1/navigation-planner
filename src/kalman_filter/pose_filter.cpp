@@ -6,7 +6,10 @@
 
 #include <chrono>
 #include <cmath>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
+#include <system_error>
 #include <utility>
 
 namespace kist {
@@ -26,6 +29,8 @@ PoseFilterOptions pose_filter_options_from_yaml(const YAML::Node& section) {
     if (!section) return o;  // absent section -> all defaults
     o.frame_id       = section["frame_id"].as<std::string>(o.frame_id);
     o.uwb_timeout_ms = section["uwb_timeout_ms"].as<double>(o.uwb_timeout_ms);
+    o.yaw_init       = section["yaw_init"].as<bool>(o.yaw_init);
+    o.yaw_state_file = section["yaw_state_file"].as<std::string>(o.yaw_state_file);
     o.ekf            = uwb_odom_aekf_params_from_yaml(section);
     return o;
 }
@@ -33,7 +38,26 @@ PoseFilterOptions pose_filter_options_from_yaml(const YAML::Node& section) {
 PoseFilter::PoseFilter(PoseFilterOptions options)
     : ekf_(options.ekf),
       frame_id_(std::move(options.frame_id)),
-      uwb_timeout_ms_(options.uwb_timeout_ms) {}
+      uwb_timeout_ms_(options.uwb_timeout_ms),
+      yaw_state_file_(std::move(options.yaw_state_file)) {
+    // Seed uncertainty: half the calibrated-threshold std -> comfortably below
+    // the gate, so a reused bias reads as calibrated immediately.
+    const double seed_std = 0.5 * options.ekf.bias_calibrated_std_deg * M_PI / 180.0;
+    seed_var_ = seed_std * seed_std;
+
+    if (!options.yaw_init && !yaw_state_file_.empty()) {
+        std::ifstream in(yaw_state_file_);
+        if (double b; in >> b) {
+            seed_b_theta_ = b;
+            have_seed_    = true;
+            std::cerr << "[PoseFilter] reusing saved yaw bias "
+                      << (b * 180.0 / M_PI) << " deg from " << yaw_state_file_ << "\n";
+        } else {
+            std::cerr << "[PoseFilter] yaw_init=false but no saved bias at "
+                      << yaw_state_file_ << " - will calibrate from motion\n";
+        }
+    }
+}
 
 PoseFilter::~PoseFilter() { stop(); }
 
@@ -49,6 +73,21 @@ void PoseFilter::stop() {
     running_ = false;
     if (thread_.joinable())
         thread_.join();
+
+    // Persist the calibrated yaw bias for a future yaw_init=false run. Saved
+    // regardless of yaw_init so there is always a fresh value to reuse next time.
+    if (!yaw_state_file_.empty() && ekf_.initialized() && ekf_.yaw_calibrated()) {
+        std::error_code ec;
+        const std::filesystem::path path(yaw_state_file_);
+        if (path.has_parent_path())
+            std::filesystem::create_directories(path.parent_path(), ec);
+        if (std::ofstream out(yaw_state_file_, std::ios::trunc); out) {
+            out << ekf_.b_theta_rad() << "\n";
+            std::cerr << "[PoseFilter] saved yaw bias "
+                      << (ekf_.b_theta_rad() * 180.0 / M_PI) << " deg to "
+                      << yaw_state_file_ << "\n";
+        }
+    }
 }
 
 // ── gates ─────────────────────────────────────────────────────────────────
@@ -76,10 +115,16 @@ bool PoseFilter::uwb_gate(double odom_yaw) {
     if (auto fix = uwb_buf.GetData(); fix && fix->stamp_ns != last_uwb_stamp_) {
         last_uwb_stamp_   = fix->stamp_ns;
         last_uwb_advance_ = std::chrono::steady_clock::now();
-        if (!ekf_.initialized())
-            ekf_.initialize(fix->x, fix->y, odom_yaw);
-        else
+        if (!ekf_.initialized()) {
+            if (have_seed_) {                    // reuse the saved yaw bias
+                ekf_.initialize(fix->x, fix->y, odom_yaw, seed_b_theta_, seed_var_);
+                have_seed_ = false;
+            } else {
+                ekf_.initialize(fix->x, fix->y, odom_yaw);
+            }
+        } else {
             ekf_.update(fix->x, fix->y);
+        }
     }
 
     if (uwb_timeout_ms_ <= 0.0) return true;                     // gate disabled
