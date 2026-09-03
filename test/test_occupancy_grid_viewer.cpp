@@ -2,7 +2,7 @@
 // stack, world-anchored.
 //   ./test_occupancy_grid_viewer [config_path]      (default config/config.yaml)
 // Producers:
-//   camera color -> YoloSemPipeline -> mask ┐
+//   camera color -> YoloInstPipeline -> mask ┐
 //   camera depth ----------------------------> LabeledCloudGenerator ┐
 //   LiDAR -> UnitreePointCloudReader(+proc) ---------------------------┤-> OccupancyGridBuilder -> grid
 //   odom + UWB -> PoseFilter -> world pose ---------------------------┘
@@ -15,7 +15,7 @@
 #include "occupancy_grid/occupancy_grid_builder.hpp"
 #include "labeled_cloud/labeled_cloud_generator.hpp"
 #include "labeled_cloud/camera_extrinsics.hpp"
-#include "cv/yolo/semantic_segmentation/yolo_sem_seg_engine.hpp"
+#include "cv/yolo/instance_segmentation/yolo_inst_seg_engine.hpp"
 #include "unitree/unitree_pointcloud_reader.hpp"
 #include "unitree/unitree_odometry_reader.hpp"
 #include "pointcloud/pointcloud_processor.hpp"
@@ -160,11 +160,11 @@ int main(int argc, char** argv) {
     if (!apply_dds_config(root)) return 1;
 
     // ── camera: color -> YOLO, depth -> labeled cloud ──
-    YoloSemSegConfig ycfg;
+    YoloInstSegConfig ycfg;
     double      target_fps = 30.0;
     std::string cam_name   = "head";
     if (const auto cv = root["cv_inference"]) {
-        ycfg.onnx_path = cv["semantic_onnx"].as<std::string>(ycfg.onnx_path);
+        ycfg.onnx_path = cv["instance_onnx"].as<std::string>(ycfg.onnx_path);
         target_fps     = cv["target_fps"].as<double>(target_fps);
         cam_name       = cv["camera"].as<std::string>(cam_name);
     }
@@ -179,7 +179,7 @@ int main(int argc, char** argv) {
     RealsenseReceiver rx;
     if (!rx.start(domain_id, "", cam_name)) return 1;
 
-    YoloSemPipeline pipe;
+    YoloInstPipeline pipe;
     if (!pipe.start(ycfg, target_fps, [&](cv::Mat& bgr, int64_t& stamp) -> bool {
         auto cf = rx.color().GetData();
         if (!cf || cf->empty()) return false;

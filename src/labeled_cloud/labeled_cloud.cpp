@@ -2,7 +2,7 @@
 
 namespace kist {
 
-void fuse_depth_semantic(const DepthFrame& d, const SemSegFrame& seg,
+void build_labeled_cloud(const DepthFrame& d, const InstSegFrame& seg,
                          LabeledCloud& out, int stride, bool require_label) {
     out.clear();
     out.stamp_ns = d.stamp_ns;

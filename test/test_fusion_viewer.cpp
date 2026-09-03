@@ -2,7 +2,7 @@
 // applied), for tuning the camera mount pose live.
 //   ./test_fusion_viewer [config_path]        (default config/config.yaml)
 // ONE RealsenseReceiver feeds both paths:
-//   color -> YoloSemPipeline -> dense class map (SemSegFrame)
+//   color -> YoloInstPipeline -> dense class map (InstSegFrame)
 //   depth -> DepthFrame (color intrinsics, aligned to color)
 // A LabeledCloudGenerator worker thread does the fusion (deproject depth + label
 // + transform to the robot frame); main only retunes the mount, reads the latest
@@ -21,7 +21,7 @@
 #include "labeled_cloud/labeled_cloud.hpp"
 #include "labeled_cloud/camera_extrinsics.hpp"
 #include "cv/yolo/yolo_pipeline.hpp"
-#include "cv/yolo/semantic_segmentation/yolo_sem_seg_engine.hpp"
+#include "cv/yolo/instance_segmentation/yolo_inst_seg_engine.hpp"
 #include "system/realsense_receiver.hpp"   // embedded from kist-ext-sensor-io
 #include "common/config.hpp"
 #include "common/dds_config.hpp"
@@ -148,11 +148,11 @@ int main(int argc, char** argv) {
     const int domain_id = root["unitree"]["domain_id"].as<int>(0);
     if (!apply_dds_config(root)) return 1;
 
-    YoloSemSegConfig cfg;
+    YoloInstSegConfig cfg;
     double      target_fps = 30.0;
     std::string cam_name   = "head";
     if (const auto cv = root["cv_inference"]) {
-        cfg.onnx_path = cv["semantic_onnx"].as<std::string>(cfg.onnx_path);
+        cfg.onnx_path = cv["instance_onnx"].as<std::string>(cfg.onnx_path);
         target_fps    = cv["target_fps"].as<double>(target_fps);
         cam_name      = cv["camera"].as<std::string>(cam_name);
     }
@@ -177,7 +177,7 @@ int main(int argc, char** argv) {
     RealsenseReceiver rx;
     if (!rx.start(domain_id, "", cam_name)) return 1;   // empty iface — NIC from the DDS xml
 
-    YoloSemPipeline pipe;
+    YoloInstPipeline pipe;
     if (!pipe.start(cfg, target_fps, [&](cv::Mat& bgr, int64_t& stamp) -> bool {
         auto cf = rx.color().GetData();
         if (!cf || cf->empty()) return false;

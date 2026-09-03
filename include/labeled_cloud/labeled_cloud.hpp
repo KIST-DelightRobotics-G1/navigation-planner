@@ -1,7 +1,7 @@
 #pragma once
 
 // LabeledCloud — a point cloud whose points each carry a semantic class id, plus
-// the function that builds one from a depth frame + semantic mask. Depth is
+// the function that builds one from a depth frame + instance masks. Depth is
 // reprojected into the color frame on the transmitter (ext align_to_color), so
 // depth[u,v], the color image, and the YOLO mask share one pixel grid + the
 // color intrinsics that ride on every depth frame (fx/fy/cx/cy). One pass over
@@ -13,7 +13,7 @@
 // frame; LabeledCloudGenerator runs both on a worker thread.
 
 #include "realsense/depth_frame.hpp"                              // ext (embedded)
-#include "cv/yolo/semantic_segmentation/yolo_sem_seg_frame.hpp"  // SemSegFrame
+#include "cv/yolo/instance_segmentation/yolo_inst_seg_frame.hpp" // InstSegFrame
 
 #include <cstdint>
 #include <vector>
@@ -36,11 +36,12 @@ struct LabeledCloud {
     void   clear() { xyz.clear(); label.clear(); }
 };
 
-// Deproject `d` into `out`, labeling each point via `seg`. Skips invalid depth
-// (raw 0) and, when `require_label` is true, pixels with no class. `stride`
+// Deproject `d` into `out`, labeling each point via the instance masks `seg`
+// (only detected objects carry a class; the rest stay kNoClass). Skips invalid
+// depth (raw 0) and, when `require_label` is true, points with no class. `stride`
 // subsamples both axes (1 = every pixel). Reuses out's storage across calls.
 // Output is in the camera optical frame.
-void fuse_depth_semantic(const DepthFrame& d, const SemSegFrame& seg,
+void build_labeled_cloud(const DepthFrame& d, const InstSegFrame& seg,
                          LabeledCloud& out, int stride = 1,
                          bool require_label = false);
 

@@ -1,6 +1,6 @@
 #pragma once
 
-// Camera -> robot-base extrinsics for the labeled cloud. fuse_depth_semantic()
+// Camera -> robot-base extrinsics for the labeled cloud. build_labeled_cloud()
 // emits points in the RealSense OPTICAL frame (+X right, +Y down, +Z forward);
 // this rigid transform lifts them into the ROBOT BASE frame (+X forward,
 // +Y left, +Z up), so the floor is level, heights are real, and the cloud

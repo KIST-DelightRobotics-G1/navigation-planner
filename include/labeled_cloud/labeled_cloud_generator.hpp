@@ -1,8 +1,8 @@
 #pragma once
 
-// Worker thread that turns the latest depth frame + semantic mask into a labeled
+// Worker thread that turns the latest depth frame + instance masks into a labeled
 // point cloud in the ROBOT frame, and publishes it on its own buffer:
-//   fuse_depth_semantic  (deproject depth + tag each point with its class)
+//   build_labeled_cloud  (deproject depth + tag each point with its class)
 //   transform_cloud      (camera -> robot base, via the mount extrinsics)
 // Inputs are two DataBuffers (depth, mask) injected at start() — the same
 // KF/reader style used across this repo; the compute is the free functions in
@@ -13,8 +13,8 @@
 #include "common/data_buffer.hpp"
 #include "labeled_cloud/labeled_cloud.hpp"       // LabeledCloud
 #include "labeled_cloud/camera_extrinsics.hpp"   // CameraExtrinsics
-#include "realsense/depth_frame.hpp"                        // DepthFrame (ext)
-#include "cv/yolo/semantic_segmentation/yolo_sem_seg_frame.hpp"  // SemSegFrame
+#include "realsense/depth_frame.hpp"                          // DepthFrame (ext)
+#include "cv/yolo/instance_segmentation/yolo_inst_seg_frame.hpp"  // InstSegFrame
 
 #include <atomic>
 #include <cstdint>
@@ -38,7 +38,7 @@ public:
 
     // Start the worker off the depth + mask buffers. False if already running.
     bool start(DataBuffer<DepthFrame>&  depth_src,
-               DataBuffer<SemSegFrame>& mask_src,
+               DataBuffer<InstSegFrame>& mask_src,
                const LabeledCloudConfig& cfg);
     void stop();
 
@@ -58,7 +58,7 @@ private:
     void run();
 
     DataBuffer<DepthFrame>*   depth_src_ = nullptr;
-    DataBuffer<SemSegFrame>*  mask_src_  = nullptr;
+    DataBuffer<InstSegFrame>*  mask_src_  = nullptr;
     DataBuffer<LabeledCloud>  cloud_buf_;
 
     std::mutex       cfg_mtx_;

@@ -44,6 +44,24 @@ struct InstSegFrame {
         return { ix * mask_width  / (input_width  ? input_width  : 1),
                  iy * mask_height / (input_height ? input_height : 1) };
     }
+
+    // Class id of the highest-scoring instance whose mask covers an original-
+    // image pixel, or -1 if none (background / undetected). Same signature as
+    // SemSegFrame::class_at, so depth fusion samples either the same way — but
+    // here only detected objects carry a label (the rest stay unlabeled).
+    int class_at(float ox, float oy) const {
+        int   best = -1;
+        float best_score = -1.0f;
+        const cv::Point p{int(ox), int(oy)};
+        for (const auto& d : detections) {
+            if (d.score <= best_score || !d.box.contains(p)) continue;  // can't win / outside box
+            const cv::Point2f m = orig_to_mask(ox, oy);
+            const int mx = int(m.x), my = int(m.y);
+            if (mx < 0 || my < 0 || mx >= d.mask.cols || my >= d.mask.rows) continue;
+            if (d.mask.at<uint8_t>(my, mx) > 0) { best = d.class_id; best_score = d.score; }
+        }
+        return best;
+    }
 };
 
 } // namespace kist

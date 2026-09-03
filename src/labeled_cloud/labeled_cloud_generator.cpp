@@ -7,7 +7,7 @@
 namespace kist {
 
 bool LabeledCloudGenerator::start(DataBuffer<DepthFrame>&  depth_src,
-                                  DataBuffer<SemSegFrame>& mask_src,
+                                  DataBuffer<InstSegFrame>& mask_src,
                                   const LabeledCloudConfig& cfg) {
     if (running_) return true;
     depth_src_ = &depth_src;
@@ -36,7 +36,7 @@ void LabeledCloudGenerator::run() {
         if (d && !d->empty() && d->stamp_ns != last_stamp) {
             last_stamp = d->stamp_ns;
             auto m = mask_src_->GetData();
-            fuse_depth_semantic(*d, m ? *m : SemSegFrame{}, cam, stride_);
+            build_labeled_cloud(*d, m ? *m : InstSegFrame{}, cam, stride_);
 
             CameraExtrinsics e;
             { std::lock_guard<std::mutex> lk(cfg_mtx_); e = extrinsics_; }
