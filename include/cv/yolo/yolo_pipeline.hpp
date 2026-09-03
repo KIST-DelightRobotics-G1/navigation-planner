@@ -84,20 +84,27 @@ private:
 
             cv::Mat bgr;
             int64_t stamp = 0;
+            bool    processed = false;
             // Latest-wins: process only a new frame, skip stale/duplicate stamps.
             if (source_ && source_(bgr, stamp) && stamp != last_stamp_ && !bgr.empty()) {
                 last_stamp_ = stamp;
                 result_.SetData(engine_.infer(bgr, stamp));
                 processed_.fetch_add(1, std::memory_order_relaxed);
+                processed = true;
             }
 
-            // Pace to the target rate (drop the wait if inference already overran).
-            if (period_ms_ > 0.0) {
+            // Pace ONLY after actually processing — that caps the inference rate.
+            // When no new frame is ready, poll again soon (don't sleep a whole
+            // period, or a poll that lands just before a frame drops it and the
+            // rate aliases against the camera).
+            if (processed && period_ms_ > 0.0) {
                 const auto period = std::chrono::duration_cast<clock::duration>(
                     std::chrono::duration<double, std::milli>(period_ms_));
                 const auto elapsed = clock::now() - t0;
                 if (elapsed < period)
                     std::this_thread::sleep_for(period - elapsed);
+            } else if (!processed) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
             }
         }
     }
