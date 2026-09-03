@@ -99,6 +99,7 @@ int main(int argc, char** argv) {
     std::string cam_name   = "head";   // which camera's topics to segment
     if (const auto cv = Config::instance().root()["cv_inference"]) {
         cfg.onnx_path = cv["instance_onnx"].as<std::string>(cfg.onnx_path);
+        cfg.score_threshold = cv["score_threshold"].as<float>(cfg.score_threshold);
         target_fps    = cv["target_fps"].as<double>(target_fps);
         cam_name      = cv["camera"].as<std::string>(cam_name);
     }

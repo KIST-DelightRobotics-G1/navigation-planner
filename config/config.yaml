@@ -59,6 +59,9 @@ cv_inference:
   target_fps: 30
   instance_onnx: models/yolo26l-seg.onnx   # YOLO26 instance-seg (proto masks)
   semantic_onnx: models/yolo26l-sem.onnx   # YOLO26 semantic-seg (dense class map)
+  # Instance-seg detection confidence cut — drops detections below this. Higher
+  # = fewer but surer labels in the fused cloud/grid; lower = more, noisier.
+  score_threshold: 0.25
 
 fusion:
   # depth + semantic mask -> labeled 3D cloud (fusion/depth_fusion.hpp), lifted
@@ -81,7 +84,7 @@ fusion:
     # viewer's 'x' key; on by default now that the tilt is calibrated.
     enabled: true
     min_z: 0.4
-    max_z: 10.0
+    max_z: 3.0
 
 occupancy_grid:
   # Probabilistic semantic grid fusing the LiDAR + labeled camera clouds.
@@ -133,6 +136,6 @@ pointcloud_processor:
     max_y:  10.0
     enable_z: true    # keep the obstacle band, drop floor and ceiling
     min_z:  0.3
-    max_z:  10.0
+    max_z:  3.0
     enable_radius: true
     min_radius: 0.5   # drop robot-body returns around the origin (XY

@@ -165,6 +165,7 @@ int main(int argc, char** argv) {
     std::string cam_name   = "head";
     if (const auto cv = root["cv_inference"]) {
         ycfg.onnx_path = cv["instance_onnx"].as<std::string>(ycfg.onnx_path);
+        ycfg.score_threshold = cv["score_threshold"].as<float>(ycfg.score_threshold);
         target_fps     = cv["target_fps"].as<double>(target_fps);
         cam_name       = cv["camera"].as<std::string>(cam_name);
     }
