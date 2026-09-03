@@ -208,7 +208,8 @@ if(EXISTS "${KIST_EXT_SENSOR_IO}/CMakeLists.txt")
         # labeled-cloud and the LiDAR reader libs, so it lives here too.
         add_library(occupancy_grid STATIC
             src/occupancy_grid/occupancy_grid.cpp
-            src/occupancy_grid/occupancy_grid_builder.cpp)
+            src/occupancy_grid/occupancy_grid_builder.cpp
+            src/occupancy_grid/object_cluster.cpp)
         target_include_directories(occupancy_grid PUBLIC include ${OpenCV_INCLUDE_DIRS})
         target_link_libraries(occupancy_grid
             PUBLIC labeled_cloud_generator unitree_pointcloud_reader)

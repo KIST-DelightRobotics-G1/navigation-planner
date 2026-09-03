@@ -109,7 +109,15 @@ occupancy_grid:
   decay_dynamic: 0.85
   dynamic_classes: [0]   # COCO class ids treated as dynamic (0 = person)
 
-  occ_threshold: 0.65    # P(occ) above which a cell reads "occupied"
+  occ_threshold: 0.81    # P(occ) above which a cell reads "occupied"
+
+  # Object clustering (connected components on occupied cells). Grouping is
+  # geometric (LiDAR + camera); the class is the cluster's majority label.
+  cluster_min_area_m2: 0.05   # drop blobs smaller than this
+  cluster_morph_cells: 1      # morphological-close radius (cells) to bridge gaps; 0 = off
+  # Class tagging (camera labels only a surface -> judge among labelled cells):
+  cluster_min_labeled_frac: 0.10  # labelled cells must be >= this frac of the cluster (presence)
+  cluster_label_min_frac: 0.50    # top class must be >= this frac of the LABELLED cells (consensus)
 
 pointcloud_processor:
   # Runs on the reader's DDS receive thread (set_processor hook):

@@ -69,6 +69,7 @@ void OccupancyGridBuilder::run() {
         }
         grid_.stamp_ns = std::max(last_lidar, last_cloud);
         grid_buf_.SetData(grid_);
+        objects_buf_.SetData(extract_clusters(grid_, cfg_));   // cluster inline (light, downstream)
         processed_.fetch_add(1, std::memory_order_relaxed);
     }
 }

@@ -9,6 +9,7 @@
 
 #include "common/data_buffer.hpp"
 #include "occupancy_grid/occupancy_grid.hpp"      // OccupancyGrid, GridConfig
+#include "occupancy_grid/object_cluster.hpp"      // ObjectList, extract_clusters
 #include "labeled_cloud/labeled_cloud.hpp"        // LabeledCloud
 #include "unitree/unitree_pointcloud.hpp"         // UnitreePointCloud
 #include "kalman_filter/calibrated_pose.hpp"      // CalibratedPose
@@ -39,7 +40,8 @@ public:
 
     bool running() const { return running_; }
 
-    DataBuffer<OccupancyGrid>& result() { return grid_buf_; }
+    DataBuffer<OccupancyGrid>& result()  { return grid_buf_; }
+    DataBuffer<ObjectList>&    objects() { return objects_buf_; }  // clusters, same cadence
     uint64_t frames_processed() const { return processed_.load(std::memory_order_relaxed); }
 
 private:
@@ -49,6 +51,7 @@ private:
     DataBuffer<LabeledCloud>*      cloud_src_ = nullptr;
     DataBuffer<CalibratedPose>*    pose_src_  = nullptr;
     DataBuffer<OccupancyGrid>      grid_buf_;
+    DataBuffer<ObjectList>         objects_buf_;
 
     GridConfig    cfg_;
     OccupancyGrid grid_;          // persistent, accumulates across frames

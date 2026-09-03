@@ -64,8 +64,8 @@ const cv::Mat& palette() {   // per-id class color (same as the seg viewers)
 // World-fixed top-down: world +X up, +Y left. Robot drawn at its world cell.
 // show_prob=false: class color, brightness = P(occ). true: pure P(occ) heatmap
 // (blue=low .. red=high) over every observed cell, so the belief is visible.
-cv::Mat render(const OccupancyGrid& g, const GridConfig& cfg, bool world,
-               bool show_prob, int occ, int fps) {
+cv::Mat render(const OccupancyGrid& g, const GridConfig& cfg, const ObjectList& objs,
+               bool world, bool show_prob, int occ, int fps) {
     cv::Mat img(kDisp, kDisp, CV_8UC3, kBg);
     const float pc = float(kDisp) / std::max(1, g.n);   // px per cell
     if (!g.empty()) {
@@ -111,9 +111,24 @@ cv::Mat render(const OccupancyGrid& g, const GridConfig& cfg, bool world,
         cv::circle(img, {rcol,rrow}, 5, cv::Scalar(0,0,255), -1);
     }
 
-    char label[140];
-    std::snprintf(label, sizeof label, "%s  %d occ  %d fps  (%.0fcm, +-%.0fm, P>%.2f)",
-                  world ? "WORLD" : "snapshot (no pose)", occ, fps,
+    // Clustered objects: bbox + id/class, colored by class (grey = unlabelled).
+    auto world_col = [&](float wy){ int ix,iy; g.world_to_cell(g.robot_x, wy, ix, iy);
+                                    return int((g.n - 1 - iy) * pc); };
+    auto world_row = [&](float wx){ int ix,iy; g.world_to_cell(wx, g.robot_y, ix, iy);
+                                    return int((g.n - 1 - ix) * pc); };
+    for (const auto& o : objs.objects) {
+        const int c0 = world_col(o.max_y), c1 = world_col(o.min_y);   // +Y left -> min_y right
+        const int r0 = world_row(o.max_x), r1 = world_row(o.min_x);   // +X up   -> max_x top
+        cv::Scalar col = (o.class_id == kNoClass) ? cv::Scalar(200,200,200)
+                         : cv::Scalar(palette().at<cv::Vec3b>(o.class_id,0));
+        cv::rectangle(img, {c0,r0}, {c1,r1}, col, 2);
+        char t[48]; std::snprintf(t, sizeof t, "#%d c%d", o.id, o.class_id);
+        cv::putText(img, t, {c0, r0 - 4}, cv::FONT_HERSHEY_SIMPLEX, 0.4, col, 1, cv::LINE_AA);
+    }
+
+    char label[160];
+    std::snprintf(label, sizeof label, "%s  %d occ  %zu obj  %d fps  (%.0fcm, +-%.0fm, P>%.2f)",
+                  world ? "WORLD" : "snapshot (no pose)", occ, objs.size(), fps,
                   cfg.resolution_m*100, cfg.half_extent_m, cfg.occ_threshold);
     cv::putText(img, label, {8,22}, cv::FONT_HERSHEY_SIMPLEX, 0.45, kText, 1, cv::LINE_AA);
     return img;
@@ -133,6 +148,10 @@ GridConfig grid_config_from_yaml(const YAML::Node& root) {
         c.decay_static  = n["decay_static"].as<float>(c.decay_static);
         c.decay_dynamic = n["decay_dynamic"].as<float>(c.decay_dynamic);
         c.occ_threshold = n["occ_threshold"].as<float>(c.occ_threshold);
+        c.cluster_min_area_m2 = n["cluster_min_area_m2"].as<float>(c.cluster_min_area_m2);
+        c.cluster_morph_cells = n["cluster_morph_cells"].as<int>(c.cluster_morph_cells);
+        c.cluster_min_labeled_frac = n["cluster_min_labeled_frac"].as<float>(c.cluster_min_labeled_frac);
+        c.cluster_label_min_frac   = n["cluster_label_min_frac"].as<float>(c.cluster_label_min_frac);
         if (const auto dc = n["dynamic_classes"])
             for (const auto& id : dc) {
                 const int v = id.as<int>(-1);
@@ -233,13 +252,15 @@ int main(int argc, char** argv) {
 
     while (!g_stop) {
         auto gp = grid.result().GetData();
+        auto op = grid.objects().GetData();
         const OccupancyGrid& og = gp ? *gp : OccupancyGrid{};
+        const ObjectList&    ol = op ? *op : ObjectList{};
         const bool world = (bool)filter.calibrated_pose_buf.GetData();
         const int  occ = og.empty() ? 0 : count_occupied(og, gc);
 
         if (has_disp) {
             cv::imshow("occupancy grid (fused, world-anchored)",
-                       render(og, gc, world, show_prob, occ, fps));
+                       render(og, gc, ol, world, show_prob, occ, fps));
             const int k = cv::waitKey(30);
             if (k == 27) break;
             if (k == 'p') show_prob = !show_prob;   // class <-> probability view
@@ -252,9 +273,10 @@ int main(int argc, char** argv) {
             window = now;
             const uint64_t p = grid.frames_processed();
             fps = int(p - last_processed); last_processed = p;
-            std::printf("  %s  %d occupied cells  %d fps\n",
-                        world ? "WORLD" : "snapshot", occ, fps);
-            if (!has_disp) cv::imwrite("/tmp/occupancy_grid.png", render(og, gc, world, show_prob, occ, fps));
+            std::printf("  %s  %d occupied cells  %zu objects  %d fps\n",
+                        world ? "WORLD" : "snapshot", occ, ol.size(), fps);
+            if (!has_disp) cv::imwrite("/tmp/occupancy_grid.png",
+                                       render(og, gc, ol, world, show_prob, occ, fps));
         }
     }
 

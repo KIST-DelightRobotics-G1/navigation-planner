@@ -47,6 +47,18 @@ struct GridConfig {
     bool  is_dynamic[256] = {};    // per class id; filled from config
 
     float occ_threshold = 0.65f;   // P(occ) above which a cell reads "occupied"
+
+    // Clustering (connected components on the occupied cells).
+    float cluster_min_area_m2 = 0.05f;  // drop blobs smaller than this
+    int   cluster_morph_cells = 1;      // morphological-close radius (cells); 0 = off
+    // Class tagging. Camera labels only a surface (a minority of a cluster's
+    // cells), so judge the class among the LABELLED cells, not all cells:
+    //   1) enough labels present:  labelled >= cluster_min_labeled_frac * area
+    //   2) class consensus:        best_class >= cluster_label_min_frac * labelled
+    // else the cluster stays kNoClass. (1) rejects a few stray labels; (2) needs
+    // the labelled cells to agree.
+    float cluster_min_labeled_frac = 0.10f;  // of all cells — presence guard
+    float cluster_label_min_frac   = 0.50f;  // of labelled cells — consensus
 };
 
 // World-anchored grid: cell (ix,iy) maps to world (origin + i*res). +X, +Y are
