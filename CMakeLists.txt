@@ -216,10 +216,19 @@ if(EXISTS "${KIST_EXT_SENSOR_IO}/CMakeLists.txt")
         set_target_properties(occupancy_grid PROPERTIES
             CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
 
-        # Full-stack viewer: camera(YOLO+depth) + LiDAR -> fused occupancy grid.
+        # Costmap: occupancy grid -> EDT -> inflated cost field (planning input).
+        add_library(costmap STATIC
+            src/costmap/edt.cpp
+            src/costmap/costmap_builder.cpp)
+        target_include_directories(costmap PUBLIC include ${OpenCV_INCLUDE_DIRS})
+        target_link_libraries(costmap PUBLIC occupancy_grid ${OpenCV_LIBS})
+        set_target_properties(costmap PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
+
+        # Full-stack viewer: camera(YOLO+depth) + LiDAR -> fused occupancy grid
+        # (+ 'c' toggles the costmap view).
         add_executable(test_occupancy_grid_viewer test/test_occupancy_grid_viewer.cpp)
         target_link_libraries(test_occupancy_grid_viewer
-            PRIVATE occupancy_grid labeled_cloud_generator cv_yolo realsense_receiver
+            PRIVATE occupancy_grid costmap labeled_cloud_generator cv_yolo realsense_receiver
                     unitree_pointcloud_reader unitree_odometry_reader pointcloud_processing
                     pose_filter uwb_receiver yaml-cpp ${OpenCV_LIBS})
         set_target_properties(test_occupancy_grid_viewer PROPERTIES

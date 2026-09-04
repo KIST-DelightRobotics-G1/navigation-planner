@@ -13,6 +13,7 @@
 // DISPLAY -> window (ESC); headless -> /tmp/occupancy_grid.png once per second.
 
 #include "occupancy_grid/occupancy_grid_builder.hpp"
+#include "costmap/costmap_builder.hpp"
 #include "labeled_cloud/labeled_cloud_generator.hpp"
 #include "labeled_cloud/camera_extrinsics.hpp"
 #include "cv/yolo/instance_segmentation/yolo_inst_seg_engine.hpp"
@@ -134,6 +135,66 @@ cv::Mat render(const OccupancyGrid& g, const GridConfig& cfg, const ObjectList& 
     return img;
 }
 
+// Costmap view: cost as a faint single-colour tint UNDER the obstacle cells,
+// so the inflation gradient reads as a soft background and the actual obstacles
+// (class-coloured, on top) stay legible.
+cv::Mat render_costmap(const OccupancyGrid& g, const GridConfig& gc,
+                       const Costmap& cm, const CostmapConfig& cfg, int fps) {
+    cv::Mat img(kDisp, kDisp, CV_8UC3, kBg);
+    const cv::Vec3b bg((uchar)kBg[0], (uchar)kBg[1], (uchar)kBg[2]);
+    const cv::Vec3b tint(40, 90, 220);   // BGR — one warm hue; opacity ramps with cost
+    if (!g.empty()) {
+        cv::Mat cells(g.n, g.n, CV_8UC3, kBg);
+        // 1) cost tint underneath (fades from bg at low cost to the hue at lethal)
+        if (!cm.empty())
+            for (int ix = 0; ix < g.n; ++ix)
+                for (int iy = 0; iy < g.n; ++iy) {
+                    const uint8_t c = cm.at(ix, iy);
+                    if (c == 0) continue;
+                    const float a = std::min(1.f, float(c) / cfg.lethal_cost) * 0.7f;  // faint
+                    const int row = g.n - 1 - ix, col = g.n - 1 - iy;
+                    cells.at<cv::Vec3b>(row, col) = cv::Vec3b(
+                        uchar(bg[0]*(1-a) + tint[0]*a),
+                        uchar(bg[1]*(1-a) + tint[1]*a),
+                        uchar(bg[2]*(1-a) + tint[2]*a));
+                }
+        // 2) obstacle cells ON TOP (class colour), so points stay visible
+        for (int ix = 0; ix < g.n; ++ix)
+            for (int iy = 0; iy < g.n; ++iy) {
+                const int idx = g.index(ix, iy);
+                if (g.prob(idx) <= gc.occ_threshold) continue;
+                const uint8_t c = g.label[idx];
+                cells.at<cv::Vec3b>(g.n-1-ix, g.n-1-iy) =
+                    (c == kNoClass) ? cv::Vec3b(200,200,200) : palette().at<cv::Vec3b>(c,0);
+            }
+        cv::resize(cells, img, img.size(), 0, 0, cv::INTER_NEAREST);
+    }
+    int rix, riy;
+    if (!g.empty() && g.world_to_cell(g.robot_x, g.robot_y, rix, riy)) {
+        const float pc = float(kDisp) / std::max(1, g.n);
+        cv::circle(img, {int((g.n-1-riy+0.5f)*pc), int((g.n-1-rix+0.5f)*pc)}, 5, {0,0,255}, -1);
+    }
+    char label[120];
+    std::snprintf(label, sizeof label, "COSTMAP  lethal=%.2fm influence=%.2fm  %d fps",
+                  cfg.lethal_radius_m, cfg.influence_radius_m, fps);
+    cv::putText(img, label, {8,22}, cv::FONT_HERSHEY_SIMPLEX, 0.45, kText, 1, cv::LINE_AA);
+    return img;
+}
+
+CostmapConfig costmap_config_from_yaml(const YAML::Node& root) {
+    CostmapConfig c;
+    if (const auto n = root["costmap"]) {
+        c.lethal_radius_m     = n["lethal_radius_m"].as<float>(c.lethal_radius_m);
+        c.influence_radius_m  = n["influence_radius_m"].as<float>(c.influence_radius_m);
+        c.lethal_cost         = uint8_t(n["lethal_cost"].as<int>(c.lethal_cost));
+        c.max_soft_cost       = uint8_t(n["max_soft_cost"].as<int>(c.max_soft_cost));
+        c.decay               = n["decay"].as<float>(c.decay);
+        c.ignore_dynamic      = n["ignore_dynamic"].as<bool>(c.ignore_dynamic);
+        c.dynamic_inflation_m = n["dynamic_inflation_m"].as<float>(c.dynamic_inflation_m);
+    }
+    return c;
+}
+
 GridConfig grid_config_from_yaml(const YAML::Node& root) {
     GridConfig c;
     if (const auto n = root["occupancy_grid"]) {
@@ -239,18 +300,22 @@ int main(int argc, char** argv) {
     OccupancyGridBuilder grid;
     if (!grid.start(lidar.cloud_buf, gen.result(), filter.calibrated_pose_buf, gc)) return 1;
 
+    const CostmapConfig cc = costmap_config_from_yaml(root);
+    CostmapBuilder cm_builder;   // built inline on demand for the 'c' view
+
     std::signal(SIGINT,  [](int) { g_stop = true; });
     std::signal(SIGTERM, [](int) { g_stop = true; });
     const bool has_disp = [] { const char* e = std::getenv("DISPLAY"); return e && e[0]; }();
     std::printf("[test_occupancy_grid_viewer] domain=%d cam=%s - %s\n"
                 "  (move the robot to calibrate the pose; until then the grid is a snapshot)\n",
                 domain_id, cam_name.c_str(),
-                has_disp ? "window (p = class/probability view, ESC to quit)"
+                has_disp ? "window (p = prob, c = costmap, ESC to quit)"
                          : "headless -> /tmp/occupancy_grid.png");
 
     uint64_t last_processed = 0;
     int      fps = 0;
     bool     show_prob = false;   // toggle with 'p': class view <-> P(occ) heatmap
+    bool     show_cost = false;   // toggle with 'c': costmap view
     auto     window = std::chrono::steady_clock::now();
 
     while (!g_stop) {
@@ -262,11 +327,14 @@ int main(int argc, char** argv) {
         const int  occ = og.empty() ? 0 : count_occupied(og, gc);
 
         if (has_disp) {
-            cv::imshow("occupancy grid (fused, world-anchored)",
-                       render(og, gc, ol, world, show_prob, occ, fps));
+            cv::Mat frame = show_cost
+                ? render_costmap(og, gc, cm_builder.build(og, gc, cc, ol.dynamic_mask), cc, fps)
+                : render(og, gc, ol, world, show_prob, occ, fps);
+            cv::imshow("occupancy grid (fused, world-anchored)", frame);
             const int k = cv::waitKey(30);
             if (k == 27) break;
             if (k == 'p') show_prob = !show_prob;   // class <-> probability view
+            if (k == 'c') show_cost = !show_cost;   // grid <-> costmap view
         } else {
             std::this_thread::sleep_for(std::chrono::milliseconds(20));
         }

@@ -98,6 +98,7 @@ ObjectList extract_clusters(const OccupancyGrid& g, const GridConfig& cfg,
     const float min_cells = cfg.cluster_min_area_m2 / (cell * cell);
     int     next_id = 0;
     cv::Mat claimed(g.n, g.n, CV_8U, cv::Scalar(0));
+    out.dynamic_mask = cv::Mat::zeros(g.n, g.n, CV_8U);   // dynamic objects' footprints (for the costmap)
 
     // 1) Instance split: every current-frame instance (ANY class) seeds a
     // min-enclosing-circle footprint that absorbs the cells inside — so touching
@@ -130,8 +131,19 @@ ObjectList extract_clusters(const OccupancyGrid& g, const GridConfig& cfg,
             cv::bitwise_and(region, occ, region);        // absorb the cells inside
             cv::subtract(region, claimed, region);       // don't double-claim
             if (cv::countNonZero(region) < min_cells) continue;
+            const size_t before = out.objects.size();
             clusters_from_mask(g, cfg, region, next_id, out.objects);
             cv::bitwise_or(claimed, region, claimed);
+            // If this instance resolved to a dynamic class (person), record its
+            // whole footprint — incl. absorbed grey cells — so the costmap can
+            // ignore the complete person, not just the labelled surface.
+            for (size_t j = before; j < out.objects.size(); ++j) {
+                const uint8_t cl = out.objects[j].class_id;
+                if (cl != kNoClass && cfg.is_dynamic[cl]) {
+                    cv::bitwise_or(out.dynamic_mask, region, out.dynamic_mask);
+                    break;
+                }
+            }
         }
     }
 

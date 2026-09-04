@@ -31,6 +31,11 @@ struct DetectedObject {
 struct ObjectList {
     int64_t stamp_ns = 0;
     std::vector<DetectedObject> objects;
+    // n x n CV_8U (255 = cell belongs to a DYNAMIC object's footprint, incl. the
+    // grey/LiDAR-only cells the cluster absorbed). The costmap clears these so a
+    // person is fully ignored (bounded to the cluster, not the neighbourhood).
+    cv::Mat dynamic_mask;
+
     bool empty() const { return objects.empty(); }
     size_t size() const { return objects.size(); }
 };

@@ -125,6 +125,20 @@ occupancy_grid:
   cluster_drop_unknown_frac: 0.90 # drop a cluster from the object list if unknown cells >= this (stays in grid)
   cluster_footprint_pad_m: 0.20   # instance split: grow each object's fitted ellipse by this (absorb behind the surface)
 
+costmap:
+  # Occupancy grid -> navigation cost field (EDT + distance->cost). Obstacles are
+  # inflated by the robot radius (lethal, impassable) with a decaying soft zone
+  # so the planner keeps clearance. Dynamic (person) obstacles get extra margin.
+  lethal_radius_m: 0.30      # robot footprint + safety -> blocked
+  influence_radius_m: 1.00   # soft-zone extent (> lethal)
+  lethal_cost: 254           # cost of the lethal zone
+  max_soft_cost: 200         # cost at the lethal boundary, decays to 0
+  decay: 3.0                 # soft cost = max_soft * exp(-decay*(d - lethal))
+  # People policy: true = people are NOT obstacles (cost 0); the robot stops and
+  # asks to pass rather than swerving. false = avoid them (grow by inflation).
+  ignore_dynamic: true
+  dynamic_inflation_m: 0.30  # extra margin around people (only when ignore_dynamic=false)
+
 pointcloud_processor:
   # Runs on the reader's DDS receive thread (set_processor hook):
   # transform first, then filter on the transformed coordinates.
