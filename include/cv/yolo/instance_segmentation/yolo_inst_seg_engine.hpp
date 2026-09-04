@@ -20,6 +20,7 @@ struct YoloInstSegConfig {
     std::string onnx_path = "models/yolo26l-seg.onnx";
 
     float score_threshold = 0.25f;   // drop detections below this confidence
+    int   mask_erode_px   = 1;       // shave the mask boundary (proto px) to kill edge bleed
 
     // Tensor names (ultralytics YOLO26-seg export). Shapes are read from the
     // engine at init(), not hardcoded.

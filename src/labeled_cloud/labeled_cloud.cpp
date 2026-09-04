@@ -17,6 +17,7 @@ void build_labeled_cloud(const DepthFrame& d, const InstSegFrame& seg,
     const size_t cap = size_t(W / stride + 1) * size_t(H / stride + 1);
     out.xyz.reserve(cap * 3);
     out.label.reserve(cap);
+    out.instance.reserve(cap);
 
     for (int v = 0; v < H; v += stride) {
         const auto* row = reinterpret_cast<const uint16_t*>(
@@ -24,13 +25,15 @@ void build_labeled_cloud(const DepthFrame& d, const InstSegFrame& seg,
         for (int u = 0; u < W; u += stride) {
             const uint16_t raw = row[u];
             if (raw == 0) continue;                       // no return / invalid
-            const int cls = seg.class_at(float(u), float(v));
+            const int cls  = seg.class_at(float(u), float(v));
             if (require_label && cls < 0) continue;
+            const int inst = seg.instance_at(float(u), float(v));
             const float Z = raw * d.depth_scale;
             out.xyz.push_back((u - d.cx) * Z * inv_fx);
             out.xyz.push_back((v - d.cy) * Z * inv_fy);
             out.xyz.push_back(Z);
             out.label.push_back(cls < 0 ? kNoClass : uint8_t(cls));
+            out.instance.push_back(int16_t(inst));
         }
     }
 }

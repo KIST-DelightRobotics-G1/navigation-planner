@@ -152,6 +152,8 @@ GridConfig grid_config_from_yaml(const YAML::Node& root) {
         c.cluster_morph_cells = n["cluster_morph_cells"].as<int>(c.cluster_morph_cells);
         c.cluster_min_labeled_frac = n["cluster_min_labeled_frac"].as<float>(c.cluster_min_labeled_frac);
         c.cluster_label_min_frac   = n["cluster_label_min_frac"].as<float>(c.cluster_label_min_frac);
+        c.cluster_drop_unknown_frac = n["cluster_drop_unknown_frac"].as<float>(c.cluster_drop_unknown_frac);
+        c.cluster_footprint_pad_m  = n["cluster_footprint_pad_m"].as<float>(c.cluster_footprint_pad_m);
         if (const auto dc = n["dynamic_classes"])
             for (const auto& id : dc) {
                 const int v = id.as<int>(-1);
@@ -185,6 +187,7 @@ int main(int argc, char** argv) {
     if (const auto cv = root["cv_inference"]) {
         ycfg.onnx_path = cv["instance_onnx"].as<std::string>(ycfg.onnx_path);
         ycfg.score_threshold = cv["score_threshold"].as<float>(ycfg.score_threshold);
+        ycfg.mask_erode_px = cv["mask_erode_px"].as<int>(ycfg.mask_erode_px);
         target_fps     = cv["target_fps"].as<double>(target_fps);
         cam_name       = cv["camera"].as<std::string>(cam_name);
     }

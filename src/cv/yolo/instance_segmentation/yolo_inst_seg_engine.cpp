@@ -75,7 +75,7 @@ InstSegFrame YoloInstSegEngine::infer(const cv::Mat& bgr, int64_t stamp_ns) {
     // ── postprocess (cuBLAS GEMM) ──
     const auto t_post = clock::now();
     post_.run(det_buf_.data(), infer_.output_device_ptr(cfg_.proto_name),
-              lb, bgr.cols, bgr.rows, cfg_.score_threshold, result);
+              lb, bgr.cols, bgr.rows, cfg_.score_threshold, cfg_.mask_erode_px, result);
     post_ms_.store(ms_since(t_post), std::memory_order_relaxed);
 
     return result;

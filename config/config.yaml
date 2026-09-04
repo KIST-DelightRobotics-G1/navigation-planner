@@ -62,6 +62,10 @@ cv_inference:
   # Instance-seg detection confidence cut — drops detections below this. Higher
   # = fewer but surer labels in the fused cloud/grid; lower = more, noisier.
   score_threshold: 0.25
+  # Erode each instance mask by this many proto-res px — the seg boundary bleeds
+  # onto whatever is behind (a person's edge tags the object behind it), so shave
+  # it to keep only the confident interior. 0 = off.
+  mask_erode_px: 1
 
 fusion:
   # depth + semantic mask -> labeled 3D cloud (fusion/depth_fusion.hpp), lifted
@@ -109,7 +113,7 @@ occupancy_grid:
   decay_dynamic: 0.85
   dynamic_classes: [0]   # COCO class ids treated as dynamic (0 = person)
 
-  occ_threshold: 0.81    # P(occ) above which a cell reads "occupied"
+  occ_threshold: 0.85    # P(occ) above which a cell reads "occupied"
 
   # Object clustering (connected components on occupied cells). Grouping is
   # geometric (LiDAR + camera); the class is the cluster's majority label.
@@ -118,6 +122,8 @@ occupancy_grid:
   # Class tagging (camera labels only a surface -> judge among labelled cells):
   cluster_min_labeled_frac: 0.10  # labelled cells must be >= this frac of the cluster (presence)
   cluster_label_min_frac: 0.50    # top class must be >= this frac of the LABELLED cells (consensus)
+  cluster_drop_unknown_frac: 0.90 # drop a cluster from the object list if unknown cells >= this (stays in grid)
+  cluster_footprint_pad_m: 0.20   # instance split: grow each object's fitted ellipse by this (absorb behind the surface)
 
 pointcloud_processor:
   # Runs on the reader's DDS receive thread (set_processor hook):

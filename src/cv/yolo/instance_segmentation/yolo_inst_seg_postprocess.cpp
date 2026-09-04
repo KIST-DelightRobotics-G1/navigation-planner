@@ -1,6 +1,7 @@
 #include "cv/yolo/instance_segmentation/yolo_inst_seg_postprocess.hpp"
 
 #include <opencv2/core.hpp>
+#include <opencv2/imgproc.hpp>   // erode / getStructuringElement
 
 #include <cublas_v2.h>
 #include <cuda_runtime_api.h>
@@ -74,7 +75,7 @@ bool YoloInstSegPostprocess::init(int det_count, int det_stride,
 
 void YoloInstSegPostprocess::run(const float* det_host, const void* proto_device,
                                  const LetterboxTransform& lb, int orig_w, int orig_h,
-                                 float score_threshold, InstSegFrame& out) {
+                                 float score_threshold, int mask_erode_px, InstSegFrame& out) {
     auto& im = *impl_;
 
     out.width  = orig_w;       out.height = orig_h;
@@ -146,6 +147,13 @@ void YoloInstSegPostprocess::run(const float* det_host, const void* proto_device
         cv::Mat mask = cv::Mat::zeros(im.proto_h, im.proto_w, CV_8U);
         cv::Mat bin = m(keep[k].pbox) > 0.0f;   // logit>0 -> CV_8U 0/255
         bin.copyTo(mask(keep[k].pbox));
+
+        // Shave the mask boundary: the segmentation edge bleeds a few px onto
+        // whatever is behind, so a person's edge can tag the object behind it.
+        // Eroding keeps only the confident interior.
+        if (mask_erode_px > 0)
+            cv::erode(mask, mask, cv::getStructuringElement(
+                          cv::MORPH_ELLIPSE, {2*mask_erode_px+1, 2*mask_erode_px+1}));
 
         InstSegDetection dobj;
         dobj.box      = keep[k].box;

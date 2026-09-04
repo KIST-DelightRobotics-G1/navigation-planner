@@ -59,6 +59,17 @@ struct GridConfig {
     // the labelled cells to agree.
     float cluster_min_labeled_frac = 0.10f;  // of all cells — presence guard
     float cluster_label_min_frac   = 0.50f;  // of labelled cells — consensus
+    // Drop a cluster from the object list when unknown (unlabelled) cells are at
+    // least this fraction — LiDAR-only / noise blobs stay in the grid (collision)
+    // but aren't reported as objects.
+    float cluster_drop_unknown_frac = 0.90f;
+
+    // Instance split: each detected instance's cells are fit with an oriented
+    // ellipse (min-area box) grown by this pad, absorbing the cells inside — so
+    // touching objects separate. The pad reaches a little behind the visible
+    // surface; the ellipse orientation keeps elongated objects from swallowing
+    // perpendicular neighbours.
+    float cluster_footprint_pad_m = 0.20f;
 };
 
 // World-anchored grid: cell (ix,iy) maps to world (origin + i*res). +X, +Y are

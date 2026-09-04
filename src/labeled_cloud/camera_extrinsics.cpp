@@ -48,6 +48,7 @@ void transform_cloud(const LabeledCloud& in, const CameraExtrinsics& e,
     const size_t n = in.size();
     out.xyz.resize(n * 3);
     out.label.resize(n);
+    out.instance = in.instance;   // per-point, unchanged by the rigid transform
     const float* R = e.R; const float* t = e.t;
     for (size_t i = 0; i < n; ++i) {
         const float X = in.xyz[3*i], Y = in.xyz[3*i+1], Z = in.xyz[3*i+2];

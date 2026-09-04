@@ -30,10 +30,13 @@ struct LabeledCloud {
     int64_t              stamp_ns = 0;   // carried from the depth frame
     std::vector<float>   xyz;
     std::vector<uint8_t> label;
+    // Per-frame instance index (-1 = none) from instance seg — NOT stable across
+    // frames; a same-frame seed for splitting touching same-class objects.
+    std::vector<int16_t> instance;
 
     size_t size()  const { return label.size(); }   // number of points
     bool   empty() const { return label.empty(); }
-    void   clear() { xyz.clear(); label.clear(); }
+    void   clear() { xyz.clear(); label.clear(); instance.clear(); }
 };
 
 // Deproject `d` into `out`, labeling each point via the instance masks `seg`

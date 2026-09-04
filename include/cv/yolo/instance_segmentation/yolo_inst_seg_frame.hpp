@@ -62,6 +62,24 @@ struct InstSegFrame {
         }
         return best;
     }
+
+    // Index of the highest-scoring instance covering an original-image pixel, or
+    // -1. This is a PER-FRAME detection index (order changes across frames), not
+    // a stable identity — usable as a same-frame seed to split touching objects,
+    // not to remember an object over time (that needs tracking).
+    int instance_at(float ox, float oy) const {
+        int best = -1; float best_score = -1.0f;
+        const cv::Point p{int(ox), int(oy)};
+        for (size_t i = 0; i < detections.size(); ++i) {
+            const auto& d = detections[i];
+            if (d.score <= best_score || !d.box.contains(p)) continue;
+            const cv::Point2f m = orig_to_mask(ox, oy);
+            const int mx = int(m.x), my = int(m.y);
+            if (mx < 0 || my < 0 || mx >= d.mask.cols || my >= d.mask.rows) continue;
+            if (d.mask.at<uint8_t>(my, mx) > 0) { best = int(i); best_score = d.score; }
+        }
+        return best;
+    }
 };
 
 } // namespace kist

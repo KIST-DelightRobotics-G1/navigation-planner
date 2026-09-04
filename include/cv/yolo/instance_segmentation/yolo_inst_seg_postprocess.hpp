@@ -37,7 +37,7 @@ public:
     // out.stamp_ns.
     void run(const float* det_host, const void* proto_device,
              const LetterboxTransform& lb, int orig_w, int orig_h,
-             float score_threshold, InstSegFrame& out);
+             float score_threshold, int mask_erode_px, InstSegFrame& out);
 
 private:
     struct Impl;
