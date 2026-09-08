@@ -2,8 +2,9 @@
 # over the clone.
 thirdparty/unitree_sdk2/
 
-# build outputs / VCS / device-specific artifacts
+# parked (non-built) modules — keep them out of the build context / image.
+_parked/
+
+# build outputs / VCS
 build/
 .git/
-models/*.trt
-models/*.engine

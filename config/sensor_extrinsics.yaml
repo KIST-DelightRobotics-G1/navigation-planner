@@ -1,0 +1,48 @@
+# Static sensor extrinsics — the MEASURED, fixed edges of the frame tree.
+#
+# Only edges whose geometry is time-INVARIANT belong here (mounting calibration).
+# Time-varying edges T(t) are supplied at runtime by their producer, WITH a
+# timestamp, into the transform tree's dynamic history — they never appear here:
+#     map   -> odom            : localization (UWB / global fusion)
+#     odom  -> pelvis          : state estimator
+#     odom  -> base_stabilized : derived from pelvis pose (roll/pitch removed)
+#     pelvis-> torso           : kinematics (3-DOF waist forward kinematics, q(t))
+#
+# Convention:  T_parent_child,  p_parent = T_parent_child * p_child.
+#   translation  = origin of the child frame expressed in the parent (FLU, metres).
+#   rotation_rpy = radians, URDF order R = Rz(yaw) Ry(pitch) Rx(roll). It is
+#                  converted to a quaternion at load time and never kept as RPY.
+#
+# A URDF fixed-joint <origin xyz rpy> is exactly this (child pose in parent), so
+# values copy straight across — but verify the direction before trusting them.
+
+transforms:
+  # torso -> lidar (Mid-360). Official Unitree g1_29dof_mode_11.urdf,
+  # torso_link -> mid360_link. roll=pi matches the old invert_y/invert_z config.
+  # This mount + the waist chain are IDENTICAL in mode_11 and rev_1_0, so this
+  # geometry is revision-agnostic; mode_machine only matters for dynamics/control.
+  - parent: torso
+    child: lidar
+    translation: { x: 0.0002835, y: 0.00003, z: 0.428434 }
+    rotation_rpy: { roll: 3.141592653589793, pitch: 0.05112069379091391, yaw: 0.0 }
+
+  # torso -> d455 (camera). A D455 REPLACED the stock D435, moved forward 35.95 mm
+  # and down 13.33 mm from the stock D435 mount (same angle). From the stock
+  # g1_29dof_mode_11 torso_link -> d435_link (0.0576235, 0.01753, 0.42987):
+  #   x = 0.0576235 + 0.03595 = 0.0935735   (forward, +x)
+  #   z = 0.42987   - 0.01333 = 0.41654     (down,   -z)
+  #   y = 0.01753 unchanged (no lateral offset given).
+  # Rotation is the stock URDF camera angle (unchanged for the D455).
+  - parent: torso
+    child: d455
+    translation: { x: 0.0935735, y: 0.01753, z: 0.41654 }
+    rotation_rpy: { roll: 0.0, pitch: 0.8307767239493009, yaw: 0.0 }
+
+  # d455 -> depth_optical: FLU camera link -> RDF optical frame (optical +Z fwd,
+  # +X right, +Y down). Fixed axis convention, zero translation. The value below is
+  # the CONVENTIONAL ROS optical rotation as a PLACEHOLDER — replace it with the
+  # value from the RealSense driver's own frame definition before trusting it.
+  - parent: d455
+    child: depth_optical
+    translation: { x: 0.0, y: 0.0, z: 0.0 }
+    rotation_rpy: { roll: -1.5707963, pitch: 0.0, yaw: -1.5707963 }

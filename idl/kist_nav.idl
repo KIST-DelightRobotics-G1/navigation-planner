@@ -1,0 +1,40 @@
+// Navigation DDS contract for kist-navigation-planner. Follows the kist ecosystem
+// conventions (module kist_msgs, seq / stamp_ns fields, CycloneDDS idlc `-l cxx`
+// codegen). Distinct file name (kist_nav.idl -> kist_nav.hpp) so the generated
+// header never collides with other repos' kist_msgs.hpp, while the C++ namespace
+// stays kist_msgs:: for cross-repo interop.
+//
+// Topics (rt/kist/nav/* convention):
+//   "rt/kist/nav/destinations"  NavDestinationList  — this planner PUBLISHES the
+//       destination catalog (loaded from config/destinations.yaml) so any peer
+//       can address a goal by name. Re-published at a low rate for late joiners.
+//   (goal command + status types land here as the goal-over-DDS flow is built.)
+
+module kist_msgs {
+
+    // One named navigation destination: a map-frame goal + the heading to align
+    // to on arrival. Mirrors an entry in config/destinations.yaml.
+    struct NavDestination {
+        string  name;
+        float   x;         // world/map frame (m)
+        float   y;
+        float   yaw_deg;   // finish heading (deg, +x = 0, +y = 90, CCW)
+    };
+
+    // The full destination catalog, published so peers share the same set of
+    // addressable goals (by name) as this planner.
+    struct NavDestinationList {
+        unsigned long long        seq;          // publisher-wide monotonic counter
+        long long                 stamp_ns;     // publish clock (epoch ns)
+        sequence<NavDestination>  destinations;
+    };
+
+    // Goal command from a peer (rt/kist/nav/goal): go to the named destination.
+    // The planner resolves the name against the catalog. Empty name = cancel/stop.
+    struct NavGoalCommand {
+        unsigned long long seq;
+        long long          stamp_ns;
+        string             name;    // destination name; "" = cancel
+    };
+
+};

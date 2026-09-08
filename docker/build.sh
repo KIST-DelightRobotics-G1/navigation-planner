@@ -1,7 +1,7 @@
 #!/bin/bash
-# Build the container image (TensorRT 10.7 base; builds the GPU inference path).
-# Self-contained: clones unitree_sdk2 (pinned) + bakes the repo in — no host
-# vendoring or bind mount needed.
+# Build the container image (plain Ubuntu base; builds the ROS-free nav
+# foundation — no GPU/CV). Self-contained: clones unitree_sdk2 (pinned), builds
+# CycloneDDS idlc, and bakes the repo in — no host vendoring or bind mount needed.
 
 set -e
 

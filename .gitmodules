@@ -1,0 +1,3 @@
+[submodule "thirdparty/invariant-ekf"]
+	path = thirdparty/invariant-ekf
+	url = https://github.com/RossHartley/invariant-ekf

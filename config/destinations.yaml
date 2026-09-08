@@ -1,0 +1,28 @@
+# kist-navigation-planner — named navigation destinations.
+#
+# The robot is commanded to one of these by NAME over DDS (an external message
+# names the destination; the planner looks it up here). It plans + drives to the
+# (x, y) goal avoiding obstacles, then — once arrived — rotates in place to align
+# its heading to `yaw_deg`, the finish orientation for that spot.
+#
+# Recorded ahead of time: destinations are fixed map locations, so they live in
+# config, not in the DDS command (which only carries the name). Edit this file to
+# add / move destinations; no rebuild needed (loaded at startup).
+#
+# Frame & units (must match the pose-filter output + occupancy grid):
+#   x, y     world/map frame, metres. +x forward, +y left (same as the grid).
+#   yaw_deg  finish heading, degrees CCW from +x. This is the direction the robot
+#            faces AFTER reaching (x, y) — the arrival pose, not the travel heading.
+#
+# Replace the examples below with the real surveyed positions on the G1.
+
+destinations:
+  - name: home           # docking / start point
+    x: 0.0
+    y: 0.0
+    yaw_deg: 0.0
+
+  - name: fridge
+    x: 4.00
+    y: 0.8
+    yaw_deg: -99          # face back toward -x on arrival

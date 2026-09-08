@@ -29,9 +29,13 @@ pose_filter:
   # continuous across the restart (no reboot, didn't rotate while off).
   yaw_init: true
   yaw_state_file: state/pose_yaw_bias.txt
+  # Manual start heading (degrees, world frame: +x = 0, +y = 90, CCW). Uncomment
+  # to seed the pose directly and SKIP the drive-to-calibrate — valid only if the
+  # robot actually starts facing this heading. Takes priority over yaw_init.
+  # initial_yaw_deg: 90.0
 
   # Process noise (Q)
-  q_xy_m2_per_m: 0.001          # x/y process noise (m^2 per m travelled)
+  q_xy_m2_per_m: 0.005          # x/y process noise (m^2 per m travelled) — higher = follow UWB faster
   q_bias_rad2_per_step: 1.0e-9  # yaw-bias random walk per step
 
   # Initial covariance (P)
@@ -39,9 +43,9 @@ pose_filter:
   p_init_bias_rad2: 9.8696044   # pi^2 — yaw bias fully unknown at init
 
   # Adaptive measurement noise R (Sage-Husa)
-  r_init_m2: 0.25
+  r_init_m2: 0.1     # trust UWB from the start (was 0.25)
   r_min_m2: 0.002
-  r_max_m2: 25.0
+  r_max_m2: 1.0      # cap the Sage-Husa R runaway so UWB is never ignored (was 25.0)
   forget_b: 0.98
   warmup_steps: 20
 
@@ -75,7 +79,7 @@ fusion:
   # (w/s pitch, e/d height) and copy the printed values back here. Camera optical
   # frame (+X right, +Y down, +Z forward) -> robot base (+X forward, +Y left, +Z up).
   camera_extrinsics:
-    # Tuned live in test_fusion_viewer against the head D435 (floor flat on z=0).
+    # Tuned live in test_fusion_viewer against the head D455 (floor flat on z=0).
     x: 0.0            # camera position in the robot frame (m, +forward)
     y: 0.0            # (m, +left)
     height: 1.24      # camera height above the floor (z, m)
@@ -87,16 +91,37 @@ fusion:
     # Keep the obstacle band, drop floor + overhead. Toggle live with the
     # viewer's 'x' key; on by default now that the tilt is calibrated.
     enabled: true
-    min_z: 0.4
-    max_z: 3.0
+    min_z: 1.0
+    max_z: 10.0
+
+  ground_plane:
+    # Per-frame RANSAC floor fit on the camera cloud. Its normal is the TRUE
+    # sensor tilt (the head mount bobs more than the base odom reports), used to
+    # level both clouds so the floor stays out of the obstacle band while walking.
+    enabled: true
+    inlier_eps_m: 0.05     # point-plane distance counted as ground
+    max_tilt_deg: 30.0     # reject planes tilted more than this from vertical (walls)
+    candidate_z_max: 0.6   # only points below this (robot z) seed the fit
+    iterations: 120        # RANSAC trials
+    min_inliers: 300       # below this the fit is rejected -> fall back to odom
+    smooth: 0.5            # temporal blend with the previous normal (0..1; 1 = none)
 
 occupancy_grid:
   # Probabilistic semantic grid fusing the LiDAR + labeled camera clouds.
   # Robot-centered, top-down. P(occ) via log-odds; class via camera votes.
   half_extent_m: 5.0     # grid covers [-5, +5] m in X and Y
   resolution_m: 0.05     # 5cm cells -> 200x200
-  min_z: 0.2             # obstacle height band (robot frame)
+  min_z: 0.3             # obstacle height band (robot frame, AFTER leveling)
   max_z: 1.8
+  # Level the LiDAR + camera clouds by the odom roll/pitch before the height band,
+  # so the floor stays out of the obstacle band while the mount bobs as the robot
+  # walks (head cam + LiDAR share the mount). false = assume a level base.
+  level_by_odom: true
+  # Preferred leveling: waist forward kinematics (rt/lowstate joints 12-14). The
+  # head sensors ride the torso, which the waist swings ~±13-27deg in gait — the
+  # pelvis odom misses it. FK gives the exact torso bob (rotation + translation);
+  # falls back to ground_plane / odom when off. Reference = first standing sample.
+  use_waist_fk: true
 
   # Inverse sensor model — log-odds added per hit (how much each sensor is
   # trusted). Camera trust falls from _near to _far as range -> cam_d_max, since
@@ -105,15 +130,38 @@ occupancy_grid:
   l_hit_cam_near: 1.10
   l_hit_cam_far: 0.20
   cam_d_max: 4.0
+  # Free-space carving: log-odds subtracted from cells a LiDAR beam passes through
+  # before its hit. Stops obstacles smearing wider over time (a goal in front of a
+  # wall ending up inside it). Smaller than l_hit_lidar so real obstacles survive.
+  # 0 = off.
+  l_miss_lidar: 0.0
+  # Camera contribution: false (default) = LiDAR alone owns occupancy and the
+  # camera only LABELS cells (its depth is noisy/floor-prone, shouldn't create
+  # obstacles). true = camera raises occupancy too (l_hit_cam_* above apply).
+  camera_occupancy: false
 
   # Temporal decay toward P=0.5 (old hits fade). A cell decays fast when its
   # class is dynamic (people move -> short memory, no smear trail), slow otherwise
   # (walls persist -> long memory). Higher = longer memory.
-  decay_static: 0.98
-  decay_dynamic: 0.85
+  decay_static: 0.94
+  decay_dynamic: 0.7
   dynamic_classes: [0]   # COCO class ids treated as dynamic (0 = person)
 
-  occ_threshold: 0.85    # P(occ) above which a cell reads "occupied"
+  occ_threshold: 0.70    # P(occ) above which a cell reads "occupied" — lower = more shows
+
+  # LiDAR scan matching: refine the UWB/odom pose by aligning each scan to the
+  # accumulated grid, over a small window — cancels the walking head-bob (which
+  # the body pose doesn't capture) so obstacles don't jitter. Stays tied to UWB
+  # globally (no drift). Needs geometric structure (walls) to lock onto.
+  scan_match:
+    enabled: true
+    search_xy_m: 0.20      # translation half-window (>= expected bob)
+    search_yaw_deg: 6.0    # rotation half-window
+    step_xy_m: 0.025       # translation search step
+    yaw_steps: 13          # yaw candidates across the window
+    sigma_m: 0.10          # likelihood falloff vs distance-to-obstacle
+    min_scan_points: 120   # fewer scan points -> skip
+    min_map_cells: 300     # sparser map -> skip (nothing to match to)
 
   # Object clustering (connected components on occupied cells). Grouping is
   # geometric (LiDAR + camera); the class is the cluster's majority label.
@@ -129,8 +177,8 @@ costmap:
   # Occupancy grid -> navigation cost field (EDT + distance->cost). Obstacles are
   # inflated by the robot radius (lethal, impassable) with a decaying soft zone
   # so the planner keeps clearance. Dynamic (person) obstacles get extra margin.
-  lethal_radius_m: 0.30      # robot footprint + safety -> blocked
-  influence_radius_m: 1.00   # soft-zone extent (> lethal)
+  lethal_radius_m: 0.20      # robot footprint + safety -> blocked
+  influence_radius_m: 0.8   # soft-zone extent (> lethal)
   lethal_cost: 254           # cost of the lethal zone
   max_soft_cost: 200         # cost at the lethal boundary, decays to 0
   decay: 3.0                 # soft cost = max_soft * exp(-decay*(d - lethal))
@@ -138,6 +186,72 @@ costmap:
   # asks to pass rather than swerving. false = avoid them (grow by inflation).
   ignore_dynamic: true
   dynamic_inflation_m: 0.30  # extra margin around people (only when ignore_dynamic=false)
+  # Noise removal: occupied cell needs >= this many occupied neighbours to be an
+  # obstacle. Sparse far-LiDAR returns otherwise inflate into lethal disks that
+  # block traversable space; walls are dense and survive. 0 = off; raise to prune
+  # more, lower to keep small real obstacles.
+  obstacle_min_neighbors: 2
+
+astar:
+  # 8-connected weighted A* over the costmap. cost >= obs_cost is impassable;
+  # per-cell cost is added to the step so the path keeps clearance.
+  base_cost: 1.0          # base traversal cost per cell
+  obs_cost: 254           # cost >= this = impassable (== costmap lethal)
+  heuristic_weight: 1.2   # f = g + w*h (>=1; higher = faster search, less optimal)
+  max_iterations: 400000
+  # Distance trust: shape the near path carefully, the far path loosely (the robot
+  # replans as it advances, so far obstacle detail is provisional). Only the soft
+  # inflation cost fades with range — lethal cells stay blocked at any distance.
+  trust_falloff_m: 3.0    # soft-cost weight decays over this range (m); 0 = off (uniform)
+  trust_min: 0.2          # floor: far soft cost keeps at least this fraction of its weight
+  # Path-length cap: reject a route whose total travel distance (along the actual
+  # winding path) exceeds this (m), so the planner won't commit to a long way
+  # around. A goal only reachable by a longer detour yields no path (drive closer,
+  # replan). 0 = unlimited.
+  max_path_len_m: 8.0
+  # Goal-approach: within this radius (m) of the destination, ignore the costmap
+  # cost + lethal block, so a goal placed right next to an obstacle (desk/fridge
+  # front, where the robot actually stood) stays reachable through its inflation
+  # zone. Keep small (~goal footprint). 0 = off.
+  goal_ignore_radius_m: 0.2
+
+planner:
+  # Replan policy for the planner worker. The costmap is rebuilt every grid frame
+  # (cheap), but A* runs only on a trigger — a new goal, the current path getting
+  # blocked, or the robot leaving the path corridor. Otherwise the committed path
+  # is kept, so it doesn't jitter between near-equal-cost routes (which would
+  # shake the drive command). The cheap peak-cost check runs every cycle; the
+  # backstop reroutes only once the path has DEGRADED — its peak cell cost reaches
+  # the threshold (grazing an obstacle, before it's fully blocked). The replan is
+  # optimal, so it never comes out worse. (A* reruns are internally capped to 10Hz
+  # so a stuck path can't hammer the search — fixed in code, not tunable here.)
+  replan_deviation_m: 0.5     # replan if the robot strays this far (m) from the path
+  replan_cost_threshold: 150  # backstop reroutes when the path's peak cell cost reaches this (0..254); higher = more tolerant
+
+navigation:
+  # Mission layer. The robot is sent to a destination by NAME over DDS; the names
+  # + their fixed map positions (x, y, finish yaw) are recorded ahead of time in
+  # the destinations file below (not in the DDS command). DDS topics for the
+  # destination command + the stop/permission handshake are added when the
+  # orchestrator is built.
+  destinations_file: config/destinations.yaml
+
+  # Base-frame velocity command (vx, vy, vyaw) published as a ROS Twist for the
+  # locomotion stack (kist-gearsonic-inference subscribes and drives the G1).
+  cmd_vel_topic: rt/kist/nav/cmd_vel
+
+  # Path follower (pure pursuit + rotate-in-place to the finish yaw on arrival).
+  follow:
+    v_max: 0.35          # m/s cruise speed
+    vyaw_max: 0.8       # rad/s max turn rate
+    lookahead_m: 0.3    # pure-pursuit lookahead distance
+    arrival_tol_m: 0.2 # within this of the goal -> stop translating, align yaw
+    yaw_tol_deg: 5.0    # within this of the goal yaw -> arrived (stop)
+    k_yaw: 1.5          # steering / rotate proportional gain
+    slow_radius_m: 0.5  # taper forward speed within this of the goal
+    rate_hz: 20         # publish cadence
+    allow_strafe: true  # holonomic: move toward the lookahead on both axes (vx+vy),
+                        # not car-like. false = forward-only (rotate then drive).
 
 pointcloud_processor:
   # Runs on the reader's DDS receive thread (set_processor hook):
@@ -164,6 +278,6 @@ pointcloud_processor:
     max_y:  10.0
     enable_z: true    # keep the obstacle band, drop floor and ceiling
     min_z:  0.3
-    max_z:  3.0
+    max_z:  10.0
     enable_radius: true
-    min_radius: 0.5   # drop robot-body returns around the origin (XY
+    min_radius: 0.3   # drop robot-body returns around the origin (XY
