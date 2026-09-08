@@ -1,9 +1,11 @@
 #pragma once
 
 #include "common/data_buffer.hpp"
+#include "common/record_queue.hpp"
 #include "unitree/unitree_pointcloud.hpp"
 
 #include <atomic>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <string>
@@ -36,7 +38,8 @@ public:
     static UnitreePointCloudReader& instance();
 
     bool start(int domain_id, const std::string& network_interface,
-               const std::string& topic = kDefaultCloudTopic);
+               const std::string& topic = kDefaultCloudTopic,
+               std::size_t queue_capacity = 16);   // frames buffered for the LIO worker
     void stop();
 
     // Optional post-decode hook, run inside the DDS receive callback
@@ -48,8 +51,14 @@ public:
     using ProcessFn = std::function<void(UnitreePointCloud&)>;
     void set_processor(ProcessFn fn);
 
-    // ── data buffer (read from any thread) ─────────────────────
-    DataBuffer<UnitreePointCloud> cloud_buf;
+    // ── outputs (read from any thread) ─────────────────────────
+    // cloud_queue: EVERY frame, for the LIO worker to drain (pop_all) time-synced
+    // with the IMU queue. cloud_buf: latest-only snapshot (quick peeks + the
+    // staleness watchdog). Prefer the queue for LIO; a dropped frame (queue full =
+    // consumer stalled) bumps `dropped`.
+    RecordQueue<UnitreePointCloud> cloud_queue;
+    DataBuffer<UnitreePointCloud>  cloud_buf;
+    std::atomic<uint64_t>          dropped{0};
 
     // ── internal: DDS callback ──────────────────────────────────
     void on_cloud_update(const void* message);

@@ -10,17 +10,11 @@
 //   Right leg  6..11 : hip_pitch, hip_roll, hip_yaw, knee, ankle_pitch, ankle_roll
 //   Waist     12..14 : yaw, roll, pitch
 
-#include <Eigen/Core>
+#include "unitree/unitree_pointcloud_imu.hpp"   // ImuSample (lives with its producer)
 
 #include <cstdint>
 
 namespace kist {
-
-struct ImuSample {
-    int64_t         stamp_ns = 0;
-    Eigen::Vector3d gyro     = Eigen::Vector3d::Zero();   // rad/s, pelvis/IMU frame
-    Eigen::Vector3d accel    = Eigen::Vector3d::Zero();   // m/s^2, includes gravity
-};
 
 struct LegJointSample {
     int64_t stamp_ns = 0;

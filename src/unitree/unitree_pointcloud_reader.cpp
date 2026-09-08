@@ -12,39 +12,42 @@
 namespace kist {
 
 // ─── PointCloud2 (ROS2 IDL) → UnitreePointCloud ──────────────────────────────
-// PointCloud2 has no CRC, so validation is structural: the FLOAT32 x/y/z
-// fields must exist (looked up by name — their offsets are not assumed).
-// Walks the binary blob by point_step and drops non-finite points.
-// Returns false when x/y/z are missing; frame_out is then untouched.
+// PointCloud2 has no CRC, so validation is structural: the FLOAT32 x/y/z fields
+// must exist (looked up by name — offsets are not assumed). The optional Mid-360
+// per-point channels (intensity FLOAT32, ring UINT16, time FLOAT32) are captured
+// when present, in lockstep with xyz. Walks the blob by point_step, drops
+// non-finite points. Returns false when x/y/z are missing (frame_out untouched).
 
 namespace {
 
-constexpr uint8_t kPointFieldFloat32 = 7;  // sensor_msgs/PointField datatype
+constexpr uint8_t kPointFieldUint16  = 4;  // sensor_msgs/PointField datatypes
+constexpr uint8_t kPointFieldFloat32 = 7;
 
-// Byte offsets of the x/y/z fields inside one point record.
-struct XYZLayout {
-    uint32_t x = 0, y = 0, z = 0;
-    bool found_x = false, found_y = false, found_z = false;
-    bool complete() const { return found_x && found_y && found_z; }
+struct FieldRef {
+    uint32_t offset = 0;
+    bool     found  = false;
 };
 
-XYZLayout find_xyz_layout(const std::vector<sensor_msgs::msg::dds_::PointField_>& fields) {
-    XYZLayout layout;
-    for (const auto& f : fields) {
-        if (f.datatype() != kPointFieldFloat32)
-            continue;
-        if      (f.name() == "x") { layout.x = f.offset(); layout.found_x = true; }
-        else if (f.name() == "y") { layout.y = f.offset(); layout.found_y = true; }
-        else if (f.name() == "z") { layout.z = f.offset(); layout.found_z = true; }
-    }
-    return layout;
+FieldRef find_field(const std::vector<sensor_msgs::msg::dds_::PointField_>& fields,
+                    const char* name, uint8_t datatype) {
+    for (const auto& f : fields)
+        if (f.datatype() == datatype && f.name() == name)
+            return {f.offset(), true};
+    return {};
 }
 
 bool decode_pointcloud2(const sensor_msgs::msg::dds_::PointCloud2_& msg,
                         UnitreePointCloud& frame_out) {
-    const XYZLayout layout = find_xyz_layout(msg.fields());
-    if (!layout.complete())
+    const auto& fields = msg.fields();
+    const FieldRef fx = find_field(fields, "x", kPointFieldFloat32);
+    const FieldRef fy = find_field(fields, "y", kPointFieldFloat32);
+    const FieldRef fz = find_field(fields, "z", kPointFieldFloat32);
+    if (!(fx.found && fy.found && fz.found))
         return false;
+
+    const FieldRef fi = find_field(fields, "intensity", kPointFieldFloat32);
+    const FieldRef fr = find_field(fields, "ring",      kPointFieldUint16);
+    const FieldRef ft = find_field(fields, "time",      kPointFieldFloat32);
 
     frame_out.stamp_ns = int64_t(msg.header().stamp().sec()) * 1000000000LL +
                          msg.header().stamp().nanosec();
@@ -54,18 +57,23 @@ bool decode_pointcloud2(const sensor_msgs::msg::dds_::PointCloud2_& msg,
     const std::size_t stride   = msg.point_step();
     const uint8_t*    blob     = msg.data().data();
 
-    frame_out.xyz.clear();
-    frame_out.xyz.reserve(n_points * 3);
+    frame_out.xyz.clear();       frame_out.xyz.reserve(n_points * 3);
+    frame_out.intensity.clear(); if (fi.found) frame_out.intensity.reserve(n_points);
+    frame_out.ring.clear();      if (fr.found) frame_out.ring.reserve(n_points);
+    frame_out.time.clear();      if (ft.found) frame_out.time.reserve(n_points);
 
     for (std::size_t i = 0; i < n_points; ++i) {
         const uint8_t* rec = blob + i * stride;
         float x, y, z;
-        std::memcpy(&x, rec + layout.x, sizeof(float));
-        std::memcpy(&y, rec + layout.y, sizeof(float));
-        std::memcpy(&z, rec + layout.z, sizeof(float));
+        std::memcpy(&x, rec + fx.offset, sizeof(float));
+        std::memcpy(&y, rec + fy.offset, sizeof(float));
+        std::memcpy(&z, rec + fz.offset, sizeof(float));
         if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z))
             continue;
         frame_out.xyz.insert(frame_out.xyz.end(), {x, y, z});
+        if (fi.found) { float v;    std::memcpy(&v, rec + fi.offset, sizeof(v)); frame_out.intensity.push_back(v); }
+        if (fr.found) { uint16_t v; std::memcpy(&v, rec + fr.offset, sizeof(v)); frame_out.ring.push_back(v); }
+        if (ft.found) { float v;    std::memcpy(&v, rec + ft.offset, sizeof(v)); frame_out.time.push_back(v); }
     }
     return true;
 }
@@ -80,7 +88,8 @@ UnitreePointCloudReader& UnitreePointCloudReader::instance() {
 }
 
 bool UnitreePointCloudReader::start(int domain_id, const std::string& network_interface,
-                                    const std::string& topic) {
+                                    const std::string& topic, std::size_t queue_capacity) {
+    cloud_queue.open(queue_capacity);
     try {
         // Safe when the embedding process already initialized the factory
         // (Init is a no-op after the first call in the same process).
@@ -108,6 +117,7 @@ void UnitreePointCloudReader::stop() {
     stop_watchdog_ = true;
     if (watchdog_thread_.joinable())
         watchdog_thread_.join();
+    cloud_queue.close();     // wake/drain the LIO consumer
     cloud_sub_.reset();
 }
 
@@ -125,7 +135,9 @@ void UnitreePointCloudReader::on_cloud_update(const void* message) {
     }
     if (process_)
         process_(frame);
-    cloud_buf.SetData(std::move(frame));
+    cloud_buf.SetData(frame);                          // latest snapshot (+ watchdog)
+    if (!cloud_queue.push(std::move(frame)))           // LIO hand-off (every frame)
+        dropped.fetch_add(1, std::memory_order_relaxed);
 }
 
 // LiDAR streams at ~10Hz; 500ms (5 frames) of silence clears the buffer

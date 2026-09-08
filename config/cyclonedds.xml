@@ -30,7 +30,7 @@
       <Interfaces>
         <!-- NIC toward the DDS peers on THIS machine: robot-LAN interface on the
              onboard PC (e.g. eth0, eno2); "lo" for same-machine testing. -->
-        <NetworkInterface name="lo" priority="default" multicast="default"/>
+        <NetworkInterface name="eno2" priority="default" multicast="default"/>
       </Interfaces>
     </General>
     <Internal>

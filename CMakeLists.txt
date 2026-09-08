@@ -68,6 +68,15 @@ add_library(unitree_pointcloud_reader STATIC
 target_include_directories(unitree_pointcloud_reader PUBLIC include)
 target_link_libraries(unitree_pointcloud_reader PUBLIC unitree_sdk2)
 
+# ─── unitree_pointcloud_imu_reader ────────────────────────────────────────────
+# Mid-360 built-in IMU (rt/utlidar/imu_livox_mid360, ~200Hz) -> ImuSample hand-off
+# queue for the LIO worker. Separate subscriber/thread from the cloud reader.
+add_library(unitree_pointcloud_imu_reader STATIC
+    src/unitree/unitree_pointcloud_imu_reader.cpp
+)
+target_include_directories(unitree_pointcloud_imu_reader PUBLIC include)
+target_link_libraries(unitree_pointcloud_imu_reader PUBLIC unitree_sdk2 Eigen3::Eigen)
+
 # ─── unitree_odometry_reader ──────────────────────────────────────────────────
 # Raw locomotion-controller odometry (rt/dog_odom); odom-frame, drifts —
 # the EKF fusion stage (odom predict + UWB update) owns global pose.
@@ -106,13 +115,9 @@ add_library(frames STATIC src/frames/sensor_extrinsics.cpp)
 target_include_directories(frames PUBLIC include)
 target_link_libraries(frames PUBLIC transforms yaml-cpp)
 
-# Articulated-body forward kinematics: joint state q(t) -> dynamic transforms,
-# plus the thin waist->tree producer.
-add_library(kinematics STATIC
-    src/kinematics/g1_kinematics.cpp
-    src/kinematics/waist_producer.cpp)
-target_include_directories(kinematics PUBLIC include)
-target_link_libraries(kinematics PUBLIC transforms)
+# kinematics/ (waist+foot FK) + state_estimation/ (InEKF) are PARKED under _parked/:
+# LIO estimates T_odom_lidar directly, so waist FK isn't needed on this branch.
+# The invariant-ekf submodule stays in thirdparty/ (unbuilt).
 
 # Transform SE(3) math + pose interpolation — pin the conventions with tests.
 add_executable(test_transform test/test_transform.cpp)
@@ -126,44 +131,19 @@ target_link_libraries(test_pose_history PRIVATE transforms)
 add_executable(test_transform_tree test/test_transform_tree.cpp)
 target_link_libraries(test_transform_tree PRIVATE transforms)
 
-# G1 FK (Transform) vs legacy Rigid cross-check + waist producer/tree integration.
-add_executable(test_g1_kinematics test/test_g1_kinematics.cpp)
-target_link_libraries(test_g1_kinematics PRIVATE kinematics)
-
-# G1 leg FK (pelvis -> ankle_roll) — q=0 identity, geometry, mirror symmetry.
-add_executable(test_g1_foot_fk test/test_g1_foot_fk.cpp)
-target_link_libraries(test_g1_foot_fk PRIVATE kinematics)
-
-# ─── thirdparty: invariant-ekf (contact-aided InEKF) ──────────────────────────
-# Upstream CMakeLists forces the compiler + global flags + builds Boost examples,
-# so we compile only the four CORE sources into our own target (no add_subdirectory,
-# no pollution). Core needs Eigen only — Boost is used solely by the examples.
-add_library(inekf STATIC
-    thirdparty/invariant-ekf/src/InEKF.cpp
-    thirdparty/invariant-ekf/src/RobotState.cpp
-    thirdparty/invariant-ekf/src/LieGroup.cpp
-    thirdparty/invariant-ekf/src/NoiseParams.cpp)
-target_include_directories(inekf PUBLIC thirdparty/invariant-ekf/include)
-target_link_libraries(inekf PUBLIC Eigen3::Eigen)
-target_compile_definitions(inekf PUBLIC INEKF_USE_MUTEX=false)
-target_compile_features(inekf PUBLIC cxx_std_17)
-
-# Smoke test: the vendored lib compiles/links with Eigen alone and the API matches.
-add_executable(test_inekf_link test/test_inekf_link.cpp)
-target_link_libraries(test_inekf_link PRIVATE inekf)
-
-# odom->pelvis estimator: InEKF wrapper hiding invariant-ekf behind our own types.
-add_library(kist_state_estimation STATIC src/state_estimation/g1_state_estimator.cpp)
-target_include_directories(kist_state_estimation PUBLIC include)
-target_link_libraries(kist_state_estimation PUBLIC kinematics Eigen3::Eigen PRIVATE inekf)
-
-add_executable(test_g1_state_estimator test/test_g1_state_estimator.cpp)
-target_link_libraries(test_g1_state_estimator PRIVATE kist_state_estimation)
-
 # Mid-360 IMU discovery probe — find the DDS topic that relays the LiDAR's IMU.
 add_executable(test_lidar_imu_probe test/test_lidar_imu_probe.cpp)
 target_include_directories(test_lidar_imu_probe PRIVATE include)
 target_link_libraries(test_lidar_imu_probe PRIVATE unitree_sdk2 yaml-cpp)
+
+# LiDAR cloud field inspector — check for a per-point timestamp channel (deskew).
+add_executable(test_lidar_cloud_fields test/test_lidar_cloud_fields.cpp)
+target_include_directories(test_lidar_cloud_fields PRIVATE include)
+target_link_libraries(test_lidar_cloud_fields PRIVATE unitree_sdk2 yaml-cpp)
+
+# Mid-360 IMU reader test — drain the hand-off queue, verify rate + g->m/s^2.
+add_executable(test_lidar_imu_reader test/test_lidar_imu_reader.cpp)
+target_link_libraries(test_lidar_imu_reader PRIVATE unitree_pointcloud_imu_reader yaml-cpp)
 
 # Static-extrinsics loader — YAML load, name->FrameId, RPY->quat, rejections.
 add_executable(test_sensor_extrinsics test/test_sensor_extrinsics.cpp)
