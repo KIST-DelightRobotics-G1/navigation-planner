@@ -145,6 +145,11 @@ target_link_libraries(test_lidar_cloud_fields PRIVATE unitree_sdk2 yaml-cpp)
 add_executable(test_lidar_imu_reader test/test_lidar_imu_reader.cpp)
 target_link_libraries(test_lidar_imu_reader PRIVATE unitree_pointcloud_imu_reader yaml-cpp)
 
+# Cloud<->IMU frame check — does the cloud's floor agree with IMU gravity direction?
+add_executable(test_frame_check test/test_frame_check.cpp)
+target_include_directories(test_frame_check PRIVATE include)
+target_link_libraries(test_frame_check PRIVATE unitree_sdk2 yaml-cpp)
+
 # Static-extrinsics loader — YAML load, name->FrameId, RPY->quat, rejections.
 add_executable(test_sensor_extrinsics test/test_sensor_extrinsics.cpp)
 target_link_libraries(test_sensor_extrinsics PRIVATE frames)
