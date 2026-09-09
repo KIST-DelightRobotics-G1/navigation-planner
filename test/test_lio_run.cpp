@@ -37,19 +37,20 @@ int main(int argc, char** argv) {
 
     while (!g_stop) {
         std::this_thread::sleep_for(std::chrono::milliseconds(200));
-        auto p = rt.pose_buf.GetData();
-        if (!p) {
-            std::printf("no valid pose yet (processed=%llu)\n",
+        auto r = rt.result_buf.GetData();
+        if (!r) {
+            std::printf("no valid result yet (processed=%llu)\n",
                         (unsigned long long)rt.frames_processed.load());
             continue;
         }
-        const auto& q = p->orientation;
+        const auto& q = r->pose.orientation;
         const double yaw = std::atan2(2.0 * (q.w()*q.z() + q.x()*q.y()),
                                       1.0 - 2.0 * (q.y()*q.y() + q.z()*q.z())) * 57.2958;
         std::printf("T_odom_lidar: pos=(% .3f % .3f % .3f) yaw=% 6.1f deg  "
-                    "vel=(% .2f % .2f % .2f) | processed=%llu dropped=%llu\n",
-                    p->position.x(), p->position.y(), p->position.z(), yaw,
-                    p->linear_velocity.x(), p->linear_velocity.y(), p->linear_velocity.z(),
+                    "vel=(% .2f % .2f % .2f) | cloud=%zu pts | processed=%llu dropped=%llu\n",
+                    r->pose.position.x(), r->pose.position.y(), r->pose.position.z(), yaw,
+                    r->pose.linear_velocity.x(), r->pose.linear_velocity.y(), r->pose.linear_velocity.z(),
+                    r->cloud.point_count(),
                     (unsigned long long)rt.frames_processed.load(),
                     (unsigned long long)rt.frames_dropped.load());
     }

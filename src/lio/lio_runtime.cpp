@@ -87,9 +87,9 @@ void LioRuntime::loop() {
                 imu_buffer.pop_front();
             }
 
-            const LioPose pose = worker_->process(frame, window);
+            LioResult res = worker_->process(frame, window);
             frames_processed.fetch_add(1, std::memory_order_relaxed);
-            if (pose.valid) pose_buf.SetData(pose);
+            if (res.valid) result_buf.SetData(std::move(res));
             frames.pop_front();
         }
     }

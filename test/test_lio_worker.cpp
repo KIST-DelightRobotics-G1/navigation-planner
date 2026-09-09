@@ -41,11 +41,12 @@ int main() {
             imu.push_back(s);
         }
 
-        const kist::LioPose p = lio.process(frame, imu);
-        std::printf("frame %d: valid=%d pos=(% .3f % .3f % .3f) vel=(% .3f % .3f % .3f)\n",
-                    f, int(p.valid),
-                    p.position.x(), p.position.y(), p.position.z(),
-                    p.linear_velocity.x(), p.linear_velocity.y(), p.linear_velocity.z());
+        const kist::LioResult r = lio.process(frame, imu);
+        std::printf("frame %d: valid=%d pos=(% .3f % .3f % .3f) vel=(% .3f % .3f % .3f) cloud=%zu\n",
+                    f, int(r.valid),
+                    r.pose.position.x(), r.pose.position.y(), r.pose.position.z(),
+                    r.pose.linear_velocity.x(), r.pose.linear_velocity.y(), r.pose.linear_velocity.z(),
+                    r.cloud.point_count());
     }
 
     std::printf("lio worker OK (ran without crashing)\n");

@@ -288,8 +288,8 @@ LioWorker::LioWorker(const LioConfig& cfg) : impl_(std::make_unique<Impl>()) {
 
 LioWorker::~LioWorker() = default;
 
-LioPose LioWorker::process(const UnitreePointCloud& frame, const std::deque<ImuSample>& imu) {
-    LioPose out;
+LioResult LioWorker::process(const UnitreePointCloud& frame, const std::deque<ImuSample>& imu) {
+    LioResult out;
 
     MeasureGroup meas;
     to_fastlio_cloud(frame, *meas.lidar, impl_->cfg.blind, impl_->cfg.point_filter_num);
@@ -341,11 +341,28 @@ LioPose LioWorker::process(const UnitreePointCloud& frame, const std::deque<ImuS
 
     map_incremental();
 
-    out.stamp_ns = frame.stamp_ns;
-    out.position = pos_lid;
-    const M3D R_ol = state_point.rot.toRotationMatrix() * state_point.offset_R_L_I.toRotationMatrix();
-    out.orientation = Eigen::Quaterniond(R_ol);
-    out.linear_velocity = state_point.vel;
+    out.stamp_ns          = frame.stamp_ns;
+    out.pose.stamp_ns     = frame.stamp_ns;
+    out.pose.position     = pos_lid;
+    const M3D R_ol        = state_point.rot.toRotationMatrix() * state_point.offset_R_L_I.toRotationMatrix();
+    out.pose.orientation  = Eigen::Quaterniond(R_ol);
+    out.pose.linear_velocity = state_point.vel;
+
+    // Registered cloud in odom: the undistorted body points transformed by the
+    // final estimated pose (FAST-LIO's publish_frame_world equivalent). This is the
+    // stable view the occupancy grid consumes.
+    const std::size_t n = feats_undistort->points.size();
+    out.cloud.xyz.reserve(n * 3);
+    out.cloud.intensity.reserve(n);
+    PointType po;
+    for (const auto& pi : feats_undistort->points) {
+        pointBodyToWorld(&pi, &po);
+        out.cloud.xyz.push_back(po.x);
+        out.cloud.xyz.push_back(po.y);
+        out.cloud.xyz.push_back(po.z);
+        out.cloud.intensity.push_back(po.intensity);
+    }
+
     out.valid = flg_EKF_inited;
     return out;
 }

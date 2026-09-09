@@ -11,13 +11,13 @@
 // The runtime drains the cloud + IMU queues, pairs a Mid-360 frame with the IMU
 // samples spanning it, and calls process() per frame.
 
+#include "lio/lio_result.hpp"         // LioPose, LioCloud, LioResult (output)
 #include "unitree/unitree_pointcloud.hpp"
 #include "unitree/unitree_pointcloud_imu.hpp"
 
 #include <Eigen/Core>
 #include <Eigen/Geometry>
 
-#include <cstdint>
 #include <deque>
 #include <memory>
 
@@ -41,14 +41,6 @@ struct LioConfig {
     int    max_iterations   = 4;     // ESIKF iterations
 };
 
-struct LioPose {                     // T_odom_lidar(t)
-    int64_t            stamp_ns    = 0;
-    Eigen::Vector3d    position    = Eigen::Vector3d::Zero();
-    Eigen::Quaterniond orientation = Eigen::Quaterniond::Identity();
-    Eigen::Vector3d    linear_velocity = Eigen::Vector3d::Zero();  // odom frame
-    bool               valid       = false;   // false while still initializing
-};
-
 class LioWorker {
 public:
     explicit LioWorker(const LioConfig& cfg = {});
@@ -58,8 +50,8 @@ public:
 
     // One synced step. `frame` = raw DDS Mid-360 cloud (needs per-point time);
     // `imu` = samples covering [frame start, frame end], ascending. Returns the
-    // current lidar pose in odom.
-    LioPose process(const UnitreePointCloud& frame, const std::deque<ImuSample>& imu);
+    // pose (T_odom_lidar) + the registered cloud in odom.
+    LioResult process(const UnitreePointCloud& frame, const std::deque<ImuSample>& imu);
 
 private:
     struct Impl;

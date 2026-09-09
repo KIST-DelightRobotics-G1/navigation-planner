@@ -7,7 +7,7 @@
 //
 //   cloud reader (DDS) -> cloud_queue ─┐
 //   imu reader   (DDS) -> imu_queue   ─┤→ [sync thread] frame + IMU window
-//                                        → LioWorker.process → LioPose → pose_buf
+//                                        → LioWorker.process → LioResult → result_buf
 //
 // The runtime paces on the IMU queue (200 Hz) and drains the cloud queue
 // non-blocking, so a frame is processed only once IMU covers its end time.
@@ -35,8 +35,9 @@ public:
                const std::string& imu_topic   = "rt/utlidar/imu_livox_mid360");
     void stop();
 
-    // Latest T_odom_lidar (empty until the filter has produced a valid pose).
-    DataBuffer<LioPose> pose_buf;
+    // Latest LIO output: pose (T_odom_lidar) + registered cloud in odom. Empty until
+    // the filter has produced a valid result.
+    DataBuffer<LioResult> result_buf;
 
     std::atomic<uint64_t> frames_processed{0};
     std::atomic<uint64_t> frames_dropped{0};      // dropped when LIO falls behind
