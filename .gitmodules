@@ -1,3 +1,6 @@
 [submodule "thirdparty/invariant-ekf"]
 	path = thirdparty/invariant-ekf
 	url = https://github.com/RossHartley/invariant-ekf
+[submodule "thirdparty/fast-lio"]
+	path = thirdparty/fast-lio
+	url = https://github.com/hku-mars/FAST_LIO

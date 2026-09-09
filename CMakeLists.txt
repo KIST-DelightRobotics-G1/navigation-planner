@@ -148,3 +148,26 @@ target_link_libraries(test_lidar_imu_reader PRIVATE unitree_pointcloud_imu_reade
 # Static-extrinsics loader — YAML load, name->FrameId, RPY->quat, rejections.
 add_executable(test_sensor_extrinsics test/test_sensor_extrinsics.cpp)
 target_link_libraries(test_sensor_extrinsics PRIVATE frames)
+
+# ─── thirdparty: FAST-LIO2 (LIO estimator) ────────────────────────────────────
+# FAST-LIO is a ROS1 catkin package, NOT a library, so we do not add_subdirectory
+# it. Its PURE core (IKFoM ESIKF: use-ikfom / IKFoM_toolkit / so3_math) is ROS- and
+# PCL-free; ikd-Tree needs PCL only. The ROS-coupled parts (common_lib /
+# IMU_Processing / laserMapping) get ported into our own src/lio/ (copied + de-ROS'd)
+# in later stages. This block builds ikd-Tree + a smoke test to prove the pure core
+# and PCL compile ROS-free in this image before that port.
+find_package(PCL REQUIRED)
+find_package(OpenMP REQUIRED)   # FAST-LIO's IKFoM/laserMapping use omp_get_wtime + parallel for
+set(FASTLIO_DIR ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/fast-lio)
+
+add_library(ikd_tree STATIC ${FASTLIO_DIR}/include/ikd-Tree/ikd_Tree.cpp)
+target_include_directories(ikd_tree PUBLIC ${FASTLIO_DIR}/include ${PCL_INCLUDE_DIRS})
+target_link_libraries(ikd_tree PUBLIC ${PCL_LIBRARIES} Eigen3::Eigen)
+
+# Smoke: IKFoM state + ikd-Tree + PCL build/link with no ROS in this image.
+# BOOST_BIND_GLOBAL_PLACEHOLDERS silences boost/bind's deprecation pragma pulled in
+# by IKFoM's esekfom.hpp.
+add_executable(test_fastlio_core test/test_fastlio_core.cpp)
+target_include_directories(test_fastlio_core PRIVATE ${FASTLIO_DIR}/include ${PCL_INCLUDE_DIRS})
+target_compile_definitions(test_fastlio_core PRIVATE BOOST_BIND_GLOBAL_PLACEHOLDERS)
+target_link_libraries(test_fastlio_core PRIVATE ikd_tree ${PCL_LIBRARIES} Eigen3::Eigen OpenMP::OpenMP_CXX)

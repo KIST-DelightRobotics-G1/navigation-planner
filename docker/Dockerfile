@@ -13,7 +13,8 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # ─── build tools + deps ─────────────────────────────────────────────────────
 #   libyaml-cpp-dev : config parsing
-#   libeigen3-dev   : transform / kinematics / estimation linear algebra
+#   libeigen3-dev   : transform / estimation linear algebra
+#   libpcl-dev      : FAST-LIO point clouds + ikd-Tree (heavy: pulls boost/flann/vtk)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     cmake \
@@ -21,6 +22,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     libyaml-cpp-dev \
     libeigen3-dev \
+    libpcl-dev \
+    nano vim less gdb \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /workspace/kist-navigation-planner
