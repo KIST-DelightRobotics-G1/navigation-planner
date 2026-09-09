@@ -168,6 +168,26 @@ target_link_libraries(ikd_tree PUBLIC ${PCL_LIBRARIES} Eigen3::Eigen)
 # BOOST_BIND_GLOBAL_PLACEHOLDERS silences boost/bind's deprecation pragma pulled in
 # by IKFoM's esekfom.hpp.
 add_executable(test_fastlio_core test/test_fastlio_core.cpp)
-target_include_directories(test_fastlio_core PRIVATE ${FASTLIO_DIR}/include ${PCL_INCLUDE_DIRS})
+target_include_directories(test_fastlio_core PRIVATE include ${FASTLIO_DIR}/include ${PCL_INCLUDE_DIRS})
 target_compile_definitions(test_fastlio_core PRIVATE BOOST_BIND_GLOBAL_PLACEHOLDERS)
 target_link_libraries(test_fastlio_core PRIVATE ikd_tree ${PCL_LIBRARIES} Eigen3::Eigen OpenMP::OpenMP_CXX)
+
+# The LIO worker: FAST-LIO2 ESIKF + ikd-Tree core, ported ROS-free behind a PIMPL
+# facade (only Eigen + our types leak). PCL / FAST-LIO includes stay PRIVATE.
+add_library(lio STATIC src/lio/lio_worker.cpp)
+target_include_directories(lio PUBLIC include PRIVATE ${FASTLIO_DIR}/include ${PCL_INCLUDE_DIRS})
+target_compile_definitions(lio PRIVATE BOOST_BIND_GLOBAL_PLACEHOLDERS)
+target_link_libraries(lio PUBLIC Eigen3::Eigen PRIVATE ikd_tree ${PCL_LIBRARIES} OpenMP::OpenMP_CXX)
+
+# LioWorker smoke — synthetic frames through the full worker (no PCL in this TU).
+add_executable(test_lio_worker test/test_lio_worker.cpp)
+target_link_libraries(test_lio_worker PRIVATE lio)
+
+# LIO runtime: live DDS Mid-360 (cloud + IMU readers) -> sync -> worker -> T_odom_lidar.
+add_library(lio_runtime STATIC src/lio/lio_runtime.cpp)
+target_include_directories(lio_runtime PUBLIC include)
+target_link_libraries(lio_runtime PUBLIC lio unitree_pointcloud_reader unitree_pointcloud_imu_reader)
+
+# Live LIO runner — first real-data run; prints T_odom_lidar at ~5 Hz.
+add_executable(test_lio_run test/test_lio_run.cpp)
+target_link_libraries(test_lio_run PRIVATE lio_runtime yaml-cpp)

@@ -55,6 +55,17 @@ public:
         return true;
     }
 
+    // Non-blocking drain: move any queued items into `out` (cleared first), return
+    // true if any were moved. Never blocks. (Added for the LIO sync loop, which
+    // paces on the IMU queue and drains the cloud queue opportunistically.)
+    bool try_pop_all(std::deque<T>& out) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        out.clear();
+        if (queue_.empty()) return false;
+        out.swap(queue_);
+        return true;
+    }
+
     // Stop accepting; wake the consumer to drain the remainder and exit.
     void close() {
         {
