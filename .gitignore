@@ -84,3 +84,6 @@ build/
 
 # runtime state (persisted yaw bias, etc.)
 state/
+
+# LIO cloud dumps
+*.pcd
