@@ -112,10 +112,24 @@ target_include_directories(kinematics PUBLIC include)
 target_link_libraries(kinematics PUBLIC transforms)
 
 # lio_transform_producer — compose LIO pose + waist FK -> T_odom_lidar / T_odom_pelvis
-# (RobotTransforms) into a thread-safe buffer; consumers read the buffer.
+# (RobotTransforms) into a thread-safe buffer + a stamp ring; consumers read either.
 add_library(lio_transform_producer STATIC src/lio/lio_transform_producer.cpp)
 target_include_directories(lio_transform_producer PUBLIC include)
 target_link_libraries(lio_transform_producer PUBLIC transforms kinematics)
+
+# mapping/ — the local obstacle layer: registered LIO scan (odom) -> 3D log-odds voxel
+# grid (3D ray-carve + floor-band) -> column-max projection to the 2D ObstacleGrid the
+# planner/costmap consume. Pure math + data; no threads (the builder, next stage, adds the
+# rolling window + worker). LiDAR-only for now (camera last).
+add_library(mapping STATIC src/mapping/obstacle_voxel_grid.cpp)
+target_include_directories(mapping PUBLIC include)   # LioCloud is a pure header — no link needed
+
+# obstacle_grid_publisher — bridge the ObstacleGrid to rviz2 over DDS (nav_msgs/
+# OccupancyGrid + geometry_msgs/PoseStamped). Visualization only; the planner reads
+# the struct directly. Kept separate so the grid math stays link-free.
+add_library(obstacle_grid_publisher STATIC src/mapping/obstacle_grid_publisher.cpp)
+target_include_directories(obstacle_grid_publisher PUBLIC include)
+target_link_libraries(obstacle_grid_publisher PUBLIC mapping unitree_sdk2)
 
 # kinematics/ (waist+foot FK) + state_estimation/ (InEKF) are PARKED under _parked/:
 # the LIO engine provides T_odom_lidar over DDS, so waist FK / InEKF aren't needed.
@@ -145,6 +159,14 @@ target_link_libraries(test_lio_receiver PRIVATE lio_receiver yaml-cpp)
 add_executable(test_lio_transforms test/test_lio_transforms.cpp)
 target_link_libraries(test_lio_transforms PRIVATE
     lio_transform_producer lio_receiver unitree_state_reader yaml-cpp)
+
+# Obstacle grid — live registered scan -> 2D log-odds occupancy (ray-carve + floor-band),
+# stamp-matched pose. Publishes /obstacle_grid + /robot_pose for rviz2; floor probe to
+# the terminal. Validate standing.
+add_executable(test_obstacle_grid test/test_obstacle_grid.cpp)
+target_link_libraries(test_obstacle_grid PRIVATE
+    mapping obstacle_grid_publisher lio_transform_producer lio_receiver
+    unitree_state_reader yaml-cpp)
 
 # ─── LIO engine: external DDS service (not built here) ────────────────────────
 # LIO now runs as a separate ROS2 process (deepglint FAST_LIO_LOCALIZATION_HUMANOID,

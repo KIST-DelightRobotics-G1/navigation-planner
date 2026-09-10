@@ -1,0 +1,72 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+    Property Tree Widget:
+      Expanded: true
+Visualization Manager:
+  Global Options:
+    Background Color: 48; 48; 48
+    Fixed Frame: camera_init
+    Frame Rate: 30
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Name: Grid
+      Enabled: true
+      Color: 90; 90; 90
+      Cell Size: 1
+      Plane Cell Count: 20
+    - Class: rviz_default_plugins/Map
+      Name: ObstacleGrid
+      Enabled: true
+      Topic:
+        Value: /obstacle_grid
+        Depth: 1
+        Durability Policy: Volatile
+        Reliability Policy: Reliable
+      Color Scheme: map
+      Draw Behind: false
+      Alpha: 0.8
+    - Class: rviz_default_plugins/PointCloud2
+      Name: RegisteredScan
+      Enabled: true
+      Topic:
+        Value: /cloud_registered_1
+        Depth: 5
+        Durability Policy: Volatile
+        Reliability Policy: Best Effort
+      Size (m): 0.03
+      Style: Points
+      Color Transformer: FlatColor
+      Color: 0; 255; 0
+    - Class: rviz_default_plugins/Pose
+      Name: RobotPose
+      Enabled: true
+      Topic:
+        Value: /robot_pose
+        Depth: 1
+        Durability Policy: Volatile
+        Reliability Policy: Reliable
+      Shape: Arrow
+      Color: 255; 25; 0
+      Shaft Length: 0.6
+      Shaft Radius: 0.05
+      Head Length: 0.2
+      Head Radius: 0.1
+    - Class: rviz_default_plugins/TF
+      Name: TF
+      Enabled: false
+  Tools:
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/FocusCamera
+    - Class: rviz_default_plugins/Measure
+  Views:
+    Current:
+      Class: rviz_default_plugins/TopDownOrtho
+      Name: TopDown
+      Scale: 40
+      Angle: 0
+      X: 0
+      Y: 0
+Window Geometry:
+  Height: 900
+  Width: 1200

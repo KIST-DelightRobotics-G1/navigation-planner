@@ -52,6 +52,7 @@ void LioTransformProducer::step(const LioOdometry& odom, const UnitreeState& sta
     out.T_odom_lidar  = T_odom_lidar;
     out.T_odom_pelvis = T_odom_pelvis;
     out_buf.SetData(out);
+    hist_.push(out);   // keep a stamp-indexed history for scan<->pose matching
 }
 
 } // namespace kist

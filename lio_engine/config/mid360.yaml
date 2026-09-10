@@ -38,7 +38,7 @@
       effect_map_en: false
       map_en: true
       scan_publish_en: true
-      dense_publish_en: false          # /cloud_registered_1 = downsampled scan; set true for full ~20k pts
+      dense_publish_en: true           # /cloud_registered_1 = FULL undistorted scan (~20k pts) for a dense obstacle map
       scan_bodyframe_pub_en: true
 
     pcd_save:
