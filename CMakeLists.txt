@@ -58,24 +58,9 @@ else()
     message(STATUS "CycloneDDS idlc not found — skipping kist_nav DDS types (goal_generation)")
 endif()
 
-# ─── unitree_pointcloud_reader ────────────────────────────────────────────────
-# LiDAR frames straight from the robot's DDS relay (rt/utlidar/...);
-# decode → optional processor hook → DataBuffer, all on the DDS
-# receive thread.
-add_library(unitree_pointcloud_reader STATIC
-    src/unitree/unitree_pointcloud_reader.cpp
-)
-target_include_directories(unitree_pointcloud_reader PUBLIC include)
-target_link_libraries(unitree_pointcloud_reader PUBLIC unitree_sdk2)
-
-# ─── unitree_pointcloud_imu_reader ────────────────────────────────────────────
-# Mid-360 built-in IMU (rt/utlidar/imu_livox_mid360, ~200Hz) -> ImuSample hand-off
-# queue for the LIO worker. Separate subscriber/thread from the cloud reader.
-add_library(unitree_pointcloud_imu_reader STATIC
-    src/unitree/unitree_pointcloud_imu_reader.cpp
-)
-target_include_directories(unitree_pointcloud_imu_reader PUBLIC include)
-target_link_libraries(unitree_pointcloud_imu_reader PUBLIC unitree_sdk2 Eigen3::Eigen)
+# unitree_pointcloud_reader + unitree_pointcloud_imu_reader (the utlidar cloud/IMU
+# feeders for the old in-planner LIO) are RETIRED under _parked/ — LIO now runs as an
+# external engine and the planner consumes its output via lio_receiver.
 
 # ─── unitree_odometry_reader ──────────────────────────────────────────────────
 # Raw locomotion-controller odometry (rt/dog_odom); odom-frame, drifts —
@@ -115,6 +100,12 @@ add_library(frames STATIC src/frames/sensor_extrinsics.cpp)
 target_include_directories(frames PUBLIC include)
 target_link_libraries(frames PUBLIC transforms yaml-cpp)
 
+# lio/ — the planner's single receiver for the external LIO engine (docs/LIO_ENGINE.md):
+# subscribes /Odometry_loc + /cloud_registered_1 -> LioOdometry / LioCloud buffers.
+add_library(lio_receiver STATIC src/lio/lio_receiver.cpp)
+target_include_directories(lio_receiver PUBLIC include)
+target_link_libraries(lio_receiver PUBLIC transforms unitree_sdk2)
+
 # kinematics/ (waist+foot FK) + state_estimation/ (InEKF) are PARKED under _parked/:
 # the LIO engine provides T_odom_lidar over DDS, so waist FK / InEKF aren't needed.
 # (invariant-ekf + fast-lio submodules removed; the LIO engine is external — see below.)
@@ -131,13 +122,13 @@ target_link_libraries(test_pose_history PRIVATE transforms)
 add_executable(test_transform_tree test/test_transform_tree.cpp)
 target_link_libraries(test_transform_tree PRIVATE transforms)
 
-# Mid-360 IMU reader test — drain the hand-off queue, verify rate + g->m/s^2.
-add_executable(test_lidar_imu_reader test/test_lidar_imu_reader.cpp)
-target_link_libraries(test_lidar_imu_reader PRIVATE unitree_pointcloud_imu_reader yaml-cpp)
-
 # Static-extrinsics loader — YAML load, name->FrameId, RPY->quat, rejections.
 add_executable(test_sensor_extrinsics test/test_sensor_extrinsics.cpp)
 target_link_libraries(test_sensor_extrinsics PRIVATE frames)
+
+# LIO receiver — live /Odometry_loc + /cloud_registered_1 -> pose (pos+yaw+vel) + cloud.
+add_executable(test_lio_receiver test/test_lio_receiver.cpp)
+target_link_libraries(test_lio_receiver PRIVATE lio_receiver yaml-cpp)
 
 # ─── LIO engine: external DDS service (not built here) ────────────────────────
 # LIO now runs as a separate ROS2 process (deepglint FAST_LIO_LOCALIZATION_HUMANOID,

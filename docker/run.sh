@@ -22,13 +22,16 @@ CONTAINER=kist-navigation-planner
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 if [ "$(docker ps -q -f name=^${CONTAINER}$)" ]; then
-    docker exec -it "${CONTAINER}" /bin/bash
+    docker exec -it "${CONTAINER}" /entrypoint.sh bash   # entrypoint sources ROS + LIO overlay
 elif [ "$(docker ps -aq -f name=^${CONTAINER}$)" ]; then
     docker start -ai "${CONTAINER}"
 else
+    # X11 for rviz2 (LIO viz); --network host for the robot/engine DDS streams.
     docker run -it \
         --name "${CONTAINER}" \
         --network host \
+        -e DISPLAY="${DISPLAY:-}" \
+        -v /tmp/.X11-unix:/tmp/.X11-unix \
         -v "${REPO_DIR}":/workspace/kist-navigation-planner \
         -w /workspace/kist-navigation-planner \
         kist-navigation-planner

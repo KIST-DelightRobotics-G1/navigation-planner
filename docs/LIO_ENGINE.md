@@ -1,9 +1,11 @@
-# LIO engine (external DDS service)
+# LIO engine (DDS service, same image as the planner)
 
-LIO runs as a **separate ROS2 process**, not linked into this ROS-free planner. It is
-the upstream **deepglint FAST_LIO_LOCALIZATION_HUMANOID** stack, driven by the raw
-Livox driver, run unmodified. It talks to the planner **only over DDS** (the robot's
-DDS is ROS2-compatible), so ROS2 stays isolated inside the engine's container.
+LIO runs as a **separate ROS2 process**, not linked into this ROS-free planner — but it
+lives in the **same all-in-one image** (`docker/Dockerfile`) as the planner. It is the
+upstream **deepglint FAST_LIO_LOCALIZATION_HUMANOID** stack (raw Livox driver + FAST-LIO),
+built unmodified into `/opt/lio_ws`. Engine and planner run as two processes in one
+container and talk **only over DDS** on localhost (RTPS interop, FastDDS↔CycloneDDS,
+validated), so ROS2 never enters the planner's build or process.
 
 Why not our own port: our ROS-free FAST-LIO port (now under `_parked/`) worked but the
 **utlidar** relay's cloud data caused straight-line stretch + fast-rotation doubling.
@@ -20,58 +22,49 @@ See memory `lio-utlidar-vs-raw-livox`.
 
 Repo: https://github.com/deepglint/FAST_LIO_LOCALIZATION_HUMANOID.git
 
-The exact working build is captured in the docker image **`lio-humble:snap`**
-(`osrf/ros:humble-desktop` + Livox-SDK2 + both packages built in `/root/ws_lio`).
-That image is the reproducible pin — the repo is not vendored here (it is ~640 MB).
+Both commits are pinned as ARGs in **`docker/Dockerfile`**, which builds one all-in-one
+image (planner + engine): it clones deepglint at build time, copies each package from its
+pinned commit into `/opt/lio_ws`, and colcon-builds them alongside the planner. Nothing is
+vendored into the repo (the clone is ~640 MB, build-time only).
 
-## How the image was built (to reproduce from scratch)
-
-```bash
-# osrf/ros:humble-desktop container, --network host
-apt update && apt install -y git cmake build-essential libeigen3-dev libpcl-dev ros-humble-pcl-ros
-# Livox-SDK2
-git clone https://github.com/Livox-SDK/Livox-SDK2.git && cd Livox-SDK2 && \
-  mkdir build && cd build && cmake .. && make -j && make install
-# workspace: driver from main, FAST_LIO from humble
-mkdir -p ~/ws_lio/src && cd ~/ws_lio/src
-cp -r <deepglint@main>/livox_ros_driver2 .
-cp -r <deepglint@humble>/FAST_LIO ./fast_lio
-cd ~/ws_lio && bash ./src/livox_ros_driver2/build.sh humble && \
-  colcon build --packages-select fast_lio
-```
-
-Config already correct for the G1 (in the driver's `config/MID360_config.json`):
-`extrinsic_parameter.roll = 180` (upside-down mount), lidar ip `192.168.123.120`,
-host_net_info ip `192.168.123.222` (must match the host's robot-LAN IP). In
-`fast_lio/config/mid360.yaml`, `lid_topic` must be `/livox/lidar` (not
-`/livox/custom_msg`). `mkdir -p ~/ws_lio/src/fast_lio/PCD` if you ever enable PCD save
-(it is dead in the humble branch anyway).
-
-## Run
+## Build
 
 ```bash
-# HOST — start the engine container (detached, keeps running)
-xhost +local:root
-docker run -d --name lio --network host -e DISPLAY=$DISPLAY \
-  -v /tmp/.X11-unix:/tmp/.X11-unix lio-humble:snap sleep infinity
-
-# Terminal 1 — driver
-docker exec -it lio bash -c \
- 'source /opt/ros/humble/setup.bash && source /root/ws_lio/install/setup.bash && \
-  ros2 launch livox_ros_driver2 msg_MID360_launch.py'
-
-# Terminal 2 — FAST-LIO
-docker exec -it lio bash -c \
- 'source /opt/ros/humble/setup.bash && source /root/ws_lio/install/setup.bash && \
-  ros2 launch fast_lio mapping.launch.py config_file:=mid360.yaml rviz:=false'
-
-# (optional) rviz: run `rviz2` standalone in the container; the launch's auto-rviz
-# does not open in this container, so add displays by hand — Fixed Frame camera_init,
-# PointCloud2 on /cloud_registered_1 (raise Decay Time), Odometry on /Odometry_loc.
+docker build -t kist-nav -f docker/Dockerfile .   # planner + LIO engine, one image
 ```
+
+Our own config lives in **`lio_engine/config/`** (version-controlled here) and is used by
+`lio_engine/lio_bringup.launch.py`, not the upstream defaults:
+`MID360_config.json` → `extrinsic_parameter.roll = 180` (upside-down mount), lidar ip
+`192.168.123.120`, host_net_info ip `192.168.123.222` (must match the host's robot-LAN IP);
+`mid360.yaml` → `lid_topic: /livox/lidar`, `dense_publish_en: false` (registered cloud is a
+downsampled scan; set true for the full ~20k points).
+
+## Run (one command)
+
+```bash
+scripts/lio_up.sh      # start the `kist` container (if needed) + the engine
+scripts/lio_down.sh    # stop
+docker exec kist tail -f /tmp/lio_engine.log            # watch engine logs
+docker exec -it kist /entrypoint.sh bash               # shell with ROS + engine + planner
+```
+
+`scripts/lio_up.sh` runs the all-in-one `kist-nav` image and launches the engine via
+`ros2 launch .../lio_engine/lio_bringup.launch.py` — driver + FAST-LIO together, using
+**our** baked config (`lio_engine/config/`), no manual multi-terminal. To change topics /
+config / what launches, edit `lio_engine/` and rebuild the image; upstream source is
+untouched.
 
 Prereq: host is on the robot LAN (`192.168.123.222`), lidar reachable
-(`ping 192.168.123.120`).
+(`ping 192.168.123.120`). `lio_up.sh` warns if it is not.
+
+Planner test in the same container:
+`docker exec -it kist /entrypoint.sh ./build/test_lio_odometry_reader config/config.yaml`
+
+Optional rviz (needs the container started with `-e DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix`,
+which `lio_up.sh` does): `docker exec -it kist /entrypoint.sh rviz2` — add displays by hand:
+Fixed Frame `camera_init`, PointCloud2 on `/cloud_registered_1` (raise Decay Time), Odometry
+on `/Odometry_loc`.
 
 ## Topic contract (what the planner subscribes to)
 
