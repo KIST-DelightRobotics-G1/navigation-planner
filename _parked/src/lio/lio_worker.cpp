@@ -56,7 +56,7 @@ double res_mean_last   = 0.05;
 double filter_size_map_min = 0.5;
 double cube_len   = 200.0;
 float  DET_RANGE  = 100.0f;
-bool   extrinsic_est_en = true;
+bool   extrinsic_est_en = false;   // set from LioConfig in the ctor
 bool   flg_EKF_inited   = false;
 bool   flg_first_scan   = true;
 double first_lidar_time = 0.0;
@@ -269,6 +269,7 @@ LioWorker::LioWorker(const LioConfig& cfg) : impl_(std::make_unique<Impl>()) {
     filter_size_map_min = cfg.filter_size_map;
     cube_len            = cfg.cube_len;
     DET_RANGE           = float(cfg.det_range);
+    extrinsic_est_en    = cfg.extrinsic_est_en;
     downSizeFilterSurf.setLeafSize(cfg.filter_size_surf, cfg.filter_size_surf, cfg.filter_size_surf);
     ikdtree.set_downsample_param(cfg.filter_size_map);
 

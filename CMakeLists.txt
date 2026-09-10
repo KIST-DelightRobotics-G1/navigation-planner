@@ -116,8 +116,8 @@ target_include_directories(frames PUBLIC include)
 target_link_libraries(frames PUBLIC transforms yaml-cpp)
 
 # kinematics/ (waist+foot FK) + state_estimation/ (InEKF) are PARKED under _parked/:
-# LIO estimates T_odom_lidar directly, so waist FK isn't needed on this branch.
-# The invariant-ekf submodule stays in thirdparty/ (unbuilt).
+# the LIO engine provides T_odom_lidar over DDS, so waist FK / InEKF aren't needed.
+# (invariant-ekf + fast-lio submodules removed; the LIO engine is external — see below.)
 
 # Transform SE(3) math + pose interpolation — pin the conventions with tests.
 add_executable(test_transform test/test_transform.cpp)
@@ -131,68 +131,18 @@ target_link_libraries(test_pose_history PRIVATE transforms)
 add_executable(test_transform_tree test/test_transform_tree.cpp)
 target_link_libraries(test_transform_tree PRIVATE transforms)
 
-# Mid-360 IMU discovery probe — find the DDS topic that relays the LiDAR's IMU.
-add_executable(test_lidar_imu_probe test/test_lidar_imu_probe.cpp)
-target_include_directories(test_lidar_imu_probe PRIVATE include)
-target_link_libraries(test_lidar_imu_probe PRIVATE unitree_sdk2 yaml-cpp)
-
-# LiDAR cloud field inspector — check for a per-point timestamp channel (deskew).
-add_executable(test_lidar_cloud_fields test/test_lidar_cloud_fields.cpp)
-target_include_directories(test_lidar_cloud_fields PRIVATE include)
-target_link_libraries(test_lidar_cloud_fields PRIVATE unitree_sdk2 yaml-cpp)
-
 # Mid-360 IMU reader test — drain the hand-off queue, verify rate + g->m/s^2.
 add_executable(test_lidar_imu_reader test/test_lidar_imu_reader.cpp)
 target_link_libraries(test_lidar_imu_reader PRIVATE unitree_pointcloud_imu_reader yaml-cpp)
-
-# Cloud<->IMU frame check — does the cloud's floor agree with IMU gravity direction?
-add_executable(test_frame_check test/test_frame_check.cpp)
-target_include_directories(test_frame_check PRIVATE include)
-target_link_libraries(test_frame_check PRIVATE unitree_sdk2 yaml-cpp)
 
 # Static-extrinsics loader — YAML load, name->FrameId, RPY->quat, rejections.
 add_executable(test_sensor_extrinsics test/test_sensor_extrinsics.cpp)
 target_link_libraries(test_sensor_extrinsics PRIVATE frames)
 
-# ─── thirdparty: FAST-LIO2 (LIO estimator) ────────────────────────────────────
-# FAST-LIO is a ROS1 catkin package, NOT a library, so we do not add_subdirectory
-# it. Its PURE core (IKFoM ESIKF: use-ikfom / IKFoM_toolkit / so3_math) is ROS- and
-# PCL-free; ikd-Tree needs PCL only. The ROS-coupled parts (common_lib /
-# IMU_Processing / laserMapping) get ported into our own src/lio/ (copied + de-ROS'd)
-# in later stages. This block builds ikd-Tree + a smoke test to prove the pure core
-# and PCL compile ROS-free in this image before that port.
-find_package(PCL REQUIRED)
-find_package(OpenMP REQUIRED)   # FAST-LIO's IKFoM/laserMapping use omp_get_wtime + parallel for
-set(FASTLIO_DIR ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/fast-lio)
-
-add_library(ikd_tree STATIC ${FASTLIO_DIR}/include/ikd-Tree/ikd_Tree.cpp)
-target_include_directories(ikd_tree PUBLIC ${FASTLIO_DIR}/include ${PCL_INCLUDE_DIRS})
-target_link_libraries(ikd_tree PUBLIC ${PCL_LIBRARIES} Eigen3::Eigen)
-
-# Smoke: IKFoM state + ikd-Tree + PCL build/link with no ROS in this image.
-# BOOST_BIND_GLOBAL_PLACEHOLDERS silences boost/bind's deprecation pragma pulled in
-# by IKFoM's esekfom.hpp.
-add_executable(test_fastlio_core test/test_fastlio_core.cpp)
-target_include_directories(test_fastlio_core PRIVATE include ${FASTLIO_DIR}/include ${PCL_INCLUDE_DIRS})
-target_compile_definitions(test_fastlio_core PRIVATE BOOST_BIND_GLOBAL_PLACEHOLDERS)
-target_link_libraries(test_fastlio_core PRIVATE ikd_tree ${PCL_LIBRARIES} Eigen3::Eigen OpenMP::OpenMP_CXX)
-
-# The LIO worker: FAST-LIO2 ESIKF + ikd-Tree core, ported ROS-free behind a PIMPL
-# facade (only Eigen + our types leak). PCL / FAST-LIO includes stay PRIVATE.
-add_library(lio STATIC src/lio/lio_worker.cpp)
-target_include_directories(lio PUBLIC include PRIVATE ${FASTLIO_DIR}/include ${PCL_INCLUDE_DIRS})
-target_compile_definitions(lio PRIVATE BOOST_BIND_GLOBAL_PLACEHOLDERS)
-target_link_libraries(lio PUBLIC Eigen3::Eigen PRIVATE ikd_tree ${PCL_LIBRARIES} OpenMP::OpenMP_CXX)
-
-# LioWorker smoke — synthetic frames through the full worker (no PCL in this TU).
-add_executable(test_lio_worker test/test_lio_worker.cpp)
-target_link_libraries(test_lio_worker PRIVATE lio)
-
-# LIO runtime: live DDS Mid-360 (cloud + IMU readers) -> sync -> worker -> T_odom_lidar.
-add_library(lio_runtime STATIC src/lio/lio_runtime.cpp)
-target_include_directories(lio_runtime PUBLIC include)
-target_link_libraries(lio_runtime PUBLIC lio unitree_pointcloud_reader unitree_pointcloud_imu_reader)
-
-# Live LIO runner — first real-data run; prints T_odom_lidar at ~5 Hz.
-add_executable(test_lio_run test/test_lio_run.cpp)
-target_link_libraries(test_lio_run PRIVATE lio_runtime yaml-cpp)
+# ─── LIO engine: external DDS service (not built here) ────────────────────────
+# LIO now runs as a separate ROS2 process (deepglint FAST_LIO_LOCALIZATION_HUMANOID,
+# raw Livox driver), pinned by the docker image — see docs/LIO_ENGINE.md. It talks to
+# this ROS-free planner ONLY over DDS: it publishes T_odom_lidar on /Odometry_loc
+# (nav_msgs/Odometry, frame camera_init) and the registered cloud on /cloud_registered_1
+# (sensor_msgs/PointCloud2, odom frame). The planner subscribes to those. Our earlier
+# ROS-free FAST-LIO port (src/lio/, ikd-Tree, probes) is retired under _parked/.

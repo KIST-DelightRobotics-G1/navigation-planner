@@ -39,6 +39,10 @@ struct LioConfig {
     double det_range        = 100.0; // map-move trigger range (m)
     double gyr_cov = 0.1, acc_cov = 0.1, b_gyr_cov = 0.0001, b_acc_cov = 0.0001;
     int    max_iterations   = 4;     // ESIKF iterations
+    // Online lidar<->imu extrinsic estimation. OFF is more stable under aggressive
+    // motion (fewer DOF to solve while the head swings) — the deepglint G1 FAST-LIO
+    // config uses false, and our extrinsic is the exact Mid-360 datasheet value.
+    bool   extrinsic_est_en = false;
 };
 
 class LioWorker {
