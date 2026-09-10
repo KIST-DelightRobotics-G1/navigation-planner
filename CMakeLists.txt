@@ -71,16 +71,16 @@ add_library(unitree_odometry_reader STATIC
 target_include_directories(unitree_odometry_reader PUBLIC include)
 target_link_libraries(unitree_odometry_reader PUBLIC unitree_sdk2)
 
-# ─── g1_lowstate_reader ───────────────────────────────────────────────────────
+# ─── unitree_state_reader ───────────────────────────────────────────────────────
 # G1 lowstate (rt/lowstate) -> waist joints, for FK sensor-bob compensation.
-add_library(g1_lowstate_reader STATIC
-    src/unitree/g1_lowstate_reader.cpp
+add_library(unitree_state_reader STATIC
+    src/unitree/unitree_state_reader.cpp
 )
-target_include_directories(g1_lowstate_reader PUBLIC include)
-target_link_libraries(g1_lowstate_reader PUBLIC unitree_sdk2)
+target_include_directories(unitree_state_reader PUBLIC include)
+target_link_libraries(unitree_state_reader PUBLIC unitree_sdk2)
 
 add_executable(test_lowstate_probe test/test_lowstate_probe.cpp)
-target_link_libraries(test_lowstate_probe PRIVATE g1_lowstate_reader yaml-cpp)
+target_link_libraries(test_lowstate_probe PRIVATE unitree_state_reader yaml-cpp)
 
 # ─── transforms / frames ──────────────────────────────────────────────────────
 # SE(3) transform math + the robot frame tree (waist FK, sensor extrinsics). The
@@ -129,6 +129,11 @@ target_link_libraries(test_sensor_extrinsics PRIVATE frames)
 # LIO receiver — live /Odometry_loc + /cloud_registered_1 -> pose (pos+yaw+vel) + cloud.
 add_executable(test_lio_receiver test/test_lio_receiver.cpp)
 target_link_libraries(test_lio_receiver PRIVATE lio_receiver yaml-cpp)
+
+# LIO -> transform tree — odom->lidar_imu (producer) + static lidar_imu->lidar, then
+# lookup(Odom, Lidar) composes the true T_odom_lidar.
+add_executable(test_lio_tree test/test_lio_tree.cpp)
+target_link_libraries(test_lio_tree PRIVATE lio_receiver transforms yaml-cpp)
 
 # ─── LIO engine: external DDS service (not built here) ────────────────────────
 # LIO now runs as a separate ROS2 process (deepglint FAST_LIO_LOCALIZATION_HUMANOID,

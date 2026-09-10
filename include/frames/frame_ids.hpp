@@ -46,7 +46,9 @@ enum class FrameId {
     BaseStabilized,
 
     // Sensors
-    Lidar,             // Mid-360
+    LidarImu,          // Mid-360 built-in IMU = the body the LIO engine tracks
+                       // (odom->lidar_imu is LIO's dynamic edge; frame "camera_init"=odom)
+    Lidar,             // Mid-360 scan centre (static offset from lidar_imu, datasheet ext)
     D455,              // camera mounting link
     DepthOptical,      // D455 depth optical frame (RDF axes)
 
@@ -60,6 +62,7 @@ inline constexpr std::string_view frame_name(FrameId f) {
         case FrameId::Pelvis:         return "pelvis";
         case FrameId::Torso:          return "torso";
         case FrameId::BaseStabilized: return "base_stabilized";
+        case FrameId::LidarImu:       return "lidar_imu";
         case FrameId::Lidar:          return "lidar";
         case FrameId::D455:           return "d455";
         case FrameId::DepthOptical:   return "depth_optical";
@@ -86,7 +89,8 @@ inline constexpr std::optional<FrameId> frame_parent(FrameId f) {
         case FrameId::Pelvis:         return FrameId::Odom;
         case FrameId::BaseStabilized: return FrameId::Odom;   // sibling of pelvis
         case FrameId::Torso:          return FrameId::Pelvis;
-        case FrameId::Lidar:          return FrameId::Torso;
+        case FrameId::LidarImu:       return FrameId::Odom;   // LIO tracks it directly
+        case FrameId::Lidar:          return FrameId::LidarImu;
         case FrameId::D455:           return FrameId::Torso;
         case FrameId::DepthOptical:   return FrameId::D455;
         case FrameId::Map:            return std::nullopt;    // root

@@ -68,7 +68,7 @@ void LioReceiver::on_odometry(const void* message) {
     LioOdometry out;
     out.pose.stamp_ns = stamp_ns(msg.header().stamp());
     out.pose.parent   = FrameId::Odom;
-    out.pose.child    = FrameId::Lidar;
+    out.pose.child    = FrameId::LidarImu;   // /Odometry_loc is the IMU body pose (T_odom_imu)
     out.pose.T_parent_child.translation = Eigen::Vector3d(p.x(), p.y(), p.z());
     out.pose.T_parent_child.rotation =
         Eigen::Quaterniond(q.w(), q.x(), q.y(), q.z()).normalized();
