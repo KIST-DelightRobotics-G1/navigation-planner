@@ -30,7 +30,7 @@ vendored into the repo (the clone is ~640 MB, build-time only).
 ## Build
 
 ```bash
-docker build -t kist-nav -f docker/Dockerfile .   # planner + LIO engine, one image
+./docker/build.sh          # planner + LIO engine, one image (tag: kist-navigation-planner)
 ```
 
 Our own config lives in **`lio_engine/config/`** (version-controlled here) and is used by
@@ -40,29 +40,35 @@ Our own config lives in **`lio_engine/config/`** (version-controlled here) and i
 `mid360.yaml` → `lid_topic: /livox/lidar`, `dense_publish_en: false` (registered cloud is a
 downsampled scan; set true for the full ~20k points).
 
-## Run (one command)
+## Run
+
+Two commands on the **host**, everything else **inside the container** (`env.sh` is
+auto-sourced, so `ros2` + `lio_up` / `lio_down` are ready in every shell):
 
 ```bash
-scripts/lio_up.sh      # start the `kist` container (if needed) + the engine
-scripts/lio_down.sh    # stop
-docker exec kist tail -f /tmp/lio_engine.log            # watch engine logs
-docker exec -it kist /entrypoint.sh bash               # shell with ROS + engine + planner
+# host
+./docker/build.sh          # build the all-in-one image (once, or after Dockerfile edits)
+./docker/run.sh            # enter the container (--network host, X11, source mounted)
+
+# inside the container (binaries are already baked/built — no cmake needed)
+lio_up                                          # start the engine (driver + FAST-LIO), detached
+./build/test_lio_receiver config/config.yaml    # planner consumes the engine over DDS
+lio_down                                         # stop the engine
+tail -f /tmp/lio_engine.log                      # watch engine logs
 ```
 
-`scripts/lio_up.sh` runs the all-in-one `kist-nav` image and launches the engine via
-`ros2 launch .../lio_engine/lio_bringup.launch.py` — driver + FAST-LIO together, using
-**our** baked config (`lio_engine/config/`), no manual multi-terminal. To change topics /
-config / what launches, edit `lio_engine/` and rebuild the image; upstream source is
-untouched.
+The image is self-contained (source + binaries baked by `docker build`), so `run.sh`
+drops you into a container with ready binaries under `build/` — no in-container build.
+For iterative dev, uncomment the source bind-mount in `docker/run.sh` and rebuild inside.
+
+`lio_up` runs `ros2 launch .../lio_engine/lio_bringup.launch.py` — driver + FAST-LIO
+together, using **our** config (`lio_engine/config/`), no manual multi-terminal. To change
+topics / config / what launches, edit `lio_engine/`; upstream source is untouched.
 
 Prereq: host is on the robot LAN (`192.168.123.222`), lidar reachable
-(`ping 192.168.123.120`). `lio_up.sh` warns if it is not.
+(`ping 192.168.123.120`). `lio_up` warns if it is not.
 
-Planner test in the same container:
-`docker exec -it kist /entrypoint.sh ./build/test_lio_odometry_reader config/config.yaml`
-
-Optional rviz (needs the container started with `-e DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix`,
-which `lio_up.sh` does): `docker exec -it kist /entrypoint.sh rviz2` — add displays by hand:
+Optional rviz (inside the container; `run.sh` forwards X): `rviz2` — add displays by hand:
 Fixed Frame `camera_init`, PointCloud2 on `/cloud_registered_1` (raise Decay Time), Odometry
 on `/Odometry_loc`.
 

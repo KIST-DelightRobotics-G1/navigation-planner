@@ -81,8 +81,17 @@ ENV CYCLONEDDS_URI=file:///workspace/kist-navigation-planner/config/cyclonedds.x
 COPY . .
 RUN cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j"$(nproc)"
 
+# Register Livox-SDK2's shared lib (installed to /usr/local/lib) with the dynamic
+# loader — without this the driver dies at runtime: "cannot open shared object file:
+# liblivox_lidar_sdk_shared.so". (Late layer so it does not invalidate the SDK build.)
+RUN ldconfig
+
+# Auto-source env.sh in interactive shells (run.sh entry + `docker exec -it`), so ROS +
+# the LIO overlay are set up and `lio_up` / `lio_down` are always available.
+RUN echo 'source /workspace/kist-navigation-planner/env.sh' >> /root/.bashrc
+
 # entrypoint sources ROS + the LIO engine overlay so `ros2 launch lio_engine/...` and
-# the planner binaries both work in an interactive shell.
+# the planner binaries both work in non-interactive `docker run <cmd>` too.
 COPY docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 ENTRYPOINT ["/entrypoint.sh"]

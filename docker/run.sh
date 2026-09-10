@@ -21,8 +21,15 @@ set -e
 CONTAINER=kist-navigation-planner
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+# The image is self-contained (deps + engine + source baked and built); NO source
+# mount — run.sh drops you into a container with ready binaries under build/, so you
+# never build inside. env.sh is auto-sourced (ROS + lio_up/lio_down ready).
+#
+# Iterative dev: add  -v "${REPO_DIR}":/workspace/kist-navigation-planner  below to
+# shadow the baked source with your working copy — then rebuild inside (the bind mount
+# hides the baked build/).
 if [ "$(docker ps -q -f name=^${CONTAINER}$)" ]; then
-    docker exec -it "${CONTAINER}" /entrypoint.sh bash   # entrypoint sources ROS + LIO overlay
+    docker exec -it "${CONTAINER}" bash   # .bashrc sources env.sh (ROS + overlay + helpers)
 elif [ "$(docker ps -aq -f name=^${CONTAINER}$)" ]; then
     docker start -ai "${CONTAINER}"
 else
@@ -32,7 +39,6 @@ else
         --network host \
         -e DISPLAY="${DISPLAY:-}" \
         -v /tmp/.X11-unix:/tmp/.X11-unix \
-        -v "${REPO_DIR}":/workspace/kist-navigation-planner \
         -w /workspace/kist-navigation-planner \
         kist-navigation-planner
 fi
