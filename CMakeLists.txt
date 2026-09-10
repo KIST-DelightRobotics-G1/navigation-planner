@@ -106,6 +106,17 @@ add_library(lio_receiver STATIC src/lio/lio_receiver.cpp)
 target_include_directories(lio_receiver PUBLIC include)
 target_link_libraries(lio_receiver PUBLIC transforms unitree_sdk2)
 
+# kinematics/ — G1 forward kinematics (waist FK: pelvis->torso from joints 12/13/14).
+add_library(kinematics STATIC src/kinematics/g1_kinematics.cpp)
+target_include_directories(kinematics PUBLIC include)
+target_link_libraries(kinematics PUBLIC transforms)
+
+# lio_transform_producer — compose LIO pose + waist FK -> T_odom_lidar / T_odom_pelvis
+# (RobotTransforms) into a thread-safe buffer; consumers read the buffer.
+add_library(lio_transform_producer STATIC src/lio/lio_transform_producer.cpp)
+target_include_directories(lio_transform_producer PUBLIC include)
+target_link_libraries(lio_transform_producer PUBLIC transforms kinematics)
+
 # kinematics/ (waist+foot FK) + state_estimation/ (InEKF) are PARKED under _parked/:
 # the LIO engine provides T_odom_lidar over DDS, so waist FK / InEKF aren't needed.
 # (invariant-ekf + fast-lio submodules removed; the LIO engine is external — see below.)
@@ -130,10 +141,10 @@ target_link_libraries(test_sensor_extrinsics PRIVATE frames)
 add_executable(test_lio_receiver test/test_lio_receiver.cpp)
 target_link_libraries(test_lio_receiver PRIVATE lio_receiver yaml-cpp)
 
-# LIO -> transform tree — odom->lidar_imu (producer) + static lidar_imu->lidar, then
-# lookup(Odom, Lidar) composes the true T_odom_lidar.
-add_executable(test_lio_tree test/test_lio_tree.cpp)
-target_link_libraries(test_lio_tree PRIVATE lio_receiver transforms yaml-cpp)
+# LIO transforms — LIO pose + waist FK -> T_odom_lidar (wobbles) / T_odom_pelvis (stable).
+add_executable(test_lio_transforms test/test_lio_transforms.cpp)
+target_link_libraries(test_lio_transforms PRIVATE
+    lio_transform_producer lio_receiver unitree_state_reader yaml-cpp)
 
 # ─── LIO engine: external DDS service (not built here) ────────────────────────
 # LIO now runs as a separate ROS2 process (deepglint FAST_LIO_LOCALIZATION_HUMANOID,

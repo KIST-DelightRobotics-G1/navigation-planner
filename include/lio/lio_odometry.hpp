@@ -5,9 +5,9 @@
 // StampedTransform (parent=Odom, child=LidarImu) carrying the timestamp; velocity is the
 // odom-frame linear velocity (0 if the engine omits twist).
 //
-// This is the engine's honest output (the IMU body). To get the LiDAR scan centre,
-// compose the static lidar_imu->lidar edge (Mid-360 datasheet ext); the transform tree
-// does that when you lookup(Odom, Lidar) — see lio_tree_producer.hpp.
+// This is the engine's honest output (the IMU body). LioTransformProducer composes the
+// static lidar_imu->lidar (datasheet ext) + the waist FK to yield T_odom_lidar and the
+// stable T_odom_pelvis — see lio_transform_producer.hpp / robot_transforms.hpp.
 
 #include "transforms/stamped_transform.hpp"   // StampedTransform (+ FrameId, Transform)
 

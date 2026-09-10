@@ -15,6 +15,7 @@
 #include "lio/lio_odometry.hpp"
 #include "lio/lio_cloud.hpp"
 
+#include <functional>
 #include <memory>
 #include <string>
 
@@ -48,12 +49,21 @@ public:
     DataBuffer<LioOdometry> odom_buf;    // latest T_odom_lidar + velocity
     DataBuffer<LioCloud>    cloud_buf;   // latest registered cloud (odom frame)
 
+    // Optional per-frame hook: called on the LIO receive thread with each decoded
+    // LioOdometry (before odom_buf is updated). The transform producer registers this
+    // to run per LIO frame — reading the latest lowstate and composing T_odom_pelvis —
+    // so no extra thread is needed. Set before start(); keep it cheap (it blocks Rx).
+    using OdomHook = std::function<void(const LioOdometry&)>;
+    void set_odom_hook(OdomHook hook) { odom_hook_ = std::move(hook); }
+
     LioReceiver(const LioReceiver&) = delete;
     LioReceiver& operator=(const LioReceiver&) = delete;
 
 private:
     void on_odometry(const void* message);
     void on_cloud(const void* message);
+
+    OdomHook odom_hook_;
 
     using OdomSub  = unitree::robot::ChannelSubscriber<nav_msgs::msg::dds_::Odometry_>;
     using CloudSub = unitree::robot::ChannelSubscriber<sensor_msgs::msg::dds_::PointCloud2_>;

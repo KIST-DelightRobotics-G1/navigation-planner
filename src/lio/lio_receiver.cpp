@@ -74,6 +74,7 @@ void LioReceiver::on_odometry(const void* message) {
         Eigen::Quaterniond(q.w(), q.x(), q.y(), q.z()).normalized();
     out.linear_velocity = Eigen::Vector3d(v.x(), v.y(), v.z());
 
+    if (odom_hook_) odom_hook_(out);   // per-frame producer (transform compose), on this Rx thread
     odom_buf.SetData(std::move(out));
 }
 
