@@ -124,15 +124,24 @@ target_link_libraries(lio_transform_producer PUBLIC transforms kinematics)
 add_library(mapping STATIC
     src/mapping/obstacle_voxel_grid.cpp
     src/mapping/edt.cpp
-    src/mapping/costmap_builder.cpp)
+    src/mapping/costmap_builder.cpp
+    src/mapping/clearance.cpp)
 target_include_directories(mapping PUBLIC include)   # LioCloud is a pure header — no link needed
 
 # obstacle_grid_publisher — bridge the ObstacleGrid to rviz2 over DDS (nav_msgs/
-# OccupancyGrid + geometry_msgs/PoseStamped). Visualization only; the planner reads
-# the struct directly. Kept separate so the grid math stays link-free.
+# OccupancyGrid + geometry_msgs/PoseStamped + PointCloud2 costmap/path). Visualization
+# only; the planner reads the struct directly. Kept separate so the grid math stays link-free.
 add_library(obstacle_grid_publisher STATIC src/mapping/obstacle_grid_publisher.cpp)
 target_include_directories(obstacle_grid_publisher PUBLIC include)
 target_link_libraries(obstacle_grid_publisher PUBLIC mapping unitree_sdk2)
+
+# planning/ — global path search: 8-connected A* over the costmap + LOS/Chaikin smoothing
+# (astar_planner), and the rviz goal subscriber (goal_receiver, rt/goal_pose).
+add_library(planning STATIC
+    src/planning/astar_planner.cpp
+    src/planning/goal_receiver.cpp)
+target_include_directories(planning PUBLIC include)
+target_link_libraries(planning PUBLIC mapping unitree_sdk2)
 
 # kinematics/ (waist+foot FK) + state_estimation/ (InEKF) are PARKED under _parked/:
 # the LIO engine provides T_odom_lidar over DDS, so waist FK / InEKF aren't needed.
@@ -168,7 +177,7 @@ target_link_libraries(test_lio_transforms PRIVATE
 # the terminal. Validate standing.
 add_executable(test_obstacle_grid test/test_obstacle_grid.cpp)
 target_link_libraries(test_obstacle_grid PRIVATE
-    mapping obstacle_grid_publisher lio_transform_producer lio_receiver
+    mapping obstacle_grid_publisher planning lio_transform_producer lio_receiver
     unitree_state_reader yaml-cpp)
 
 # ─── LIO engine: external DDS service (not built here) ────────────────────────

@@ -21,7 +21,10 @@
 #include "mapping/obstacle_voxel_grid.hpp"
 #include "mapping/costmap.hpp"
 #include "mapping/costmap_builder.hpp"
+#include "mapping/clearance.hpp"
 #include "mapping/obstacle_grid_publisher.hpp"
+#include "planning/astar_planner.hpp"
+#include "planning/goal_receiver.hpp"
 #include "unitree/unitree_state_reader.hpp"
 
 #include <algorithm>
@@ -133,6 +136,20 @@ int main(int argc, char** argv) {
     ObstacleGridPublisher pub;
     if (!pub.start(domain)) return 1;
 
+    // Global A* planner + rviz "2D Goal Pose" goal (rt/goal_pose). Click a goal in rviz
+    // -> the robot's route is planned on the costmap and published on rt/plan.
+    AStarConfig acfg;   // clearance-centred route + LOS straighten + max-radius arc corners
+    if (const char* v = std::getenv("W_CENTER"))  acfg.w_center             = std::atof(v);  // route centre preference
+    if (const char* v = std::getenv("REF_CLR"))   acfg.ref_clr_m            = std::atof(v);  // "central enough" clearance
+    if (const char* v = std::getenv("D_SAFE"))    acfg.d_safe_m             = std::atof(v);  // extra clearance margin
+    if (const char* v = std::getenv("R_MIN"))     acfg.r_min_m              = std::atof(v);  // arc radius search
+    if (const char* v = std::getenv("R_MAX"))     acfg.r_max_m              = std::atof(v);
+    if (const char* v = std::getenv("R_STEP"))    acfg.r_step_m             = std::atof(v);
+    if (const char* v = std::getenv("ANGLE_MIN")) acfg.corner_angle_min_deg = std::atof(v);  // straight threshold
+    AStarPlanner planner(acfg);
+    GoalReceiver gr;
+    if (!gr.start(domain)) return 1;
+
     std::printf("[test_obstacle_grid] publishing /obstacle_grid + /robot_pose (frame camera_init).\n"
                 "  rviz2 -d docs/obstacle_grid.rviz — rolling window follows the robot; walk freely. Ctrl+C.\n");
 
@@ -188,6 +205,19 @@ int main(int argc, char** argv) {
             pub.publish(grid, gcfg);
             const Costmap cm = cb.build(grid, gcfg, ccfg);        // occupancy -> EDT costmap
             pub.publish_costmap(cm);
+
+            // Insight views: clearance heatmap (distance-to-wall) + medial axis (centreline).
+            const std::vector<float> clr = clearance_field(cm);
+            pub.publish_clearance(cm, clr);
+            pub.publish_medial(medial_axis(cm, clr));
+
+            // Plan robot -> clicked goal on the costmap, publish the route (rt/plan).
+            if (auto goal = gr.goal_buf.GetData()) {
+                const Path route = planner.plan(cm, {px, py}, {goal->x, goal->y});
+                pub.publish_path(route.waypoints, gcfg.resolution_m);   // smoothed (bubble)
+                pub.publish_path_raw(route.raw_waypoints);              // raw A*
+                if (route.empty()) std::printf("\n[plan] no route to (%.2f, %.2f)\n", goal->x, goal->y);
+            }
         }
         if (now - last_draw >= std::chrono::seconds(1)) {   // single in-place line, no scroll
             last_draw = now;

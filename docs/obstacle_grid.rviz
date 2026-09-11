@@ -63,11 +63,61 @@ Visualization Manager:
       Shaft Radius: 0.05
       Head Length: 0.2
       Head Radius: 0.1
+    - Class: rviz_default_plugins/Map
+      Name: Clearance
+      Enabled: false
+      Topic:
+        Value: /clearance
+        Depth: 1
+        Durability Policy: Volatile
+        Reliability Policy: Reliable
+      Color Scheme: costmap
+      Draw Behind: true
+      Alpha: 0.9
+    - Class: rviz_default_plugins/PointCloud2
+      Name: MedialAxis
+      Enabled: false
+      Topic:
+        Value: /medial_axis
+        Depth: 1
+        Durability Policy: Volatile
+        Reliability Policy: Reliable
+      Size (m): 0.04
+      Style: Points
+      Color Transformer: FlatColor
+      Color: 0; 200; 255
+    - Class: rviz_default_plugins/PointCloud2
+      Name: PlanRaw
+      Enabled: true
+      Topic:
+        Value: /plan_raw
+        Depth: 1
+        Durability Policy: Volatile
+        Reliability Policy: Reliable
+      Size (m): 0.03
+      Style: Points
+      Color Transformer: FlatColor
+      Color: 255; 0; 255
+    - Class: rviz_default_plugins/PointCloud2
+      Name: Plan
+      Enabled: true
+      Topic:
+        Value: /plan
+        Depth: 1
+        Durability Policy: Volatile
+        Reliability Policy: Reliable
+      Size (m): 0.06
+      Style: Points
+      Color Transformer: FlatColor
+      Color: 0; 255; 0
     - Class: rviz_default_plugins/TF
       Name: TF
       Enabled: false
   Tools:
     - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/SetGoal
+      Topic:
+        Value: /goal_pose
     - Class: rviz_default_plugins/FocusCamera
     - Class: rviz_default_plugins/Measure
   Views:
