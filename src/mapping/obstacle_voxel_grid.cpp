@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
+#include <vector>
 
 namespace kist {
 
@@ -19,6 +21,34 @@ void voxel_reset(ObstacleVoxelGrid& v, const ObstacleGridConfig& cfg,
 
 void voxel_decay(ObstacleVoxelGrid& v, const ObstacleGridConfig& cfg) {
     for (float& l : v.log_odds) l *= cfg.decay;
+}
+
+void voxel_recenter(ObstacleVoxelGrid& v, float center_x, float center_y) {
+    if (v.empty()) return;
+    const float half = 0.5f * v.n * v.resolution;               // half_extent
+    const float want_ox = center_x - half, want_oy = center_y - half;
+    const int sx = int(std::lround((want_ox - v.origin_x) / v.resolution));
+    const int sy = int(std::lround((want_oy - v.origin_y) / v.resolution));
+    if (sx == 0 && sy == 0) return;                             // sub-cell move -> nothing to do
+
+    // New column (ix,iy) inherits old column (ix+sx, iy+sy); off-grid -> cleared. A whole
+    // z-column (k voxels) moves as a unit, so only the xy anchor changes.
+    std::vector<float> nb(v.log_odds.size(), 0.0f);
+    const int stride = v.k;
+    for (int iy = 0; iy < v.n; ++iy) {
+        const int oy = iy + sy;
+        if (oy < 0 || oy >= v.n) continue;
+        for (int ix = 0; ix < v.n; ++ix) {
+            const int ox = ix + sx;
+            if (ox < 0 || ox >= v.n) continue;
+            std::memcpy(&nb[(iy * v.n + ix) * stride],
+                        &v.log_odds[(oy * v.n + ox) * stride],
+                        stride * sizeof(float));
+        }
+    }
+    v.log_odds.swap(nb);
+    v.origin_x += sx * v.resolution;                            // cell-aligned move
+    v.origin_y += sy * v.resolution;
 }
 
 namespace {

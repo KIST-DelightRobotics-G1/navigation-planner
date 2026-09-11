@@ -1,8 +1,8 @@
 // Live validation of the ObstacleGrid core: the registered LIO scan (odom) is
-// accumulated into a 2D log-odds occupancy grid, ray-carved from the stamp-matched
-// lidar centre, floor removed by a pelvis-referenced height band. The grid is FIXED
-// here (reset once, centred on the first pelvis) — the rolling-window shift is the
-// builder's job (next stage), so validate this standing / in a small area.
+// accumulated into a 3D log-odds voxel grid, 3D-ray-carved from the stamp-matched lidar
+// centre, floor removed by a pelvis-referenced height band, then column-projected to 2D.
+// A rolling window keeps the grid centred on the robot (voxel_recenter), so the robot can
+// walk freely — far cells drop off and new ones come in while accumulation stays valid.
 //
 //   ./test_obstacle_grid [config.yaml]
 //
@@ -127,7 +127,7 @@ int main(int argc, char** argv) {
     if (!pub.start(domain)) return 1;
 
     std::printf("[test_obstacle_grid] publishing /obstacle_grid + /robot_pose (frame camera_init).\n"
-                "  rviz2 -d docs/obstacle_grid.rviz — stand / small area (FIXED window). Ctrl+C.\n");
+                "  rviz2 -d docs/obstacle_grid.rviz — rolling window follows the robot; walk freely. Ctrl+C.\n");
 
     // floor_z EMA: the floor is static, but the pelvis bobs vertically each step (gait),
     // so pelvis_z - stand_height jitters and the band momentarily dips into the floor,
@@ -167,6 +167,7 @@ int main(int argc, char** argv) {
 
         if (!grid_ready) { voxel_reset(vgrid, gcfg, px, py); grid_ready = true; }
 
+        voxel_recenter(vgrid, px, py);   // rolling window: keep the grid centred on the robot
         voxel_decay(vgrid, gcfg);
         voxel_integrate(vgrid, *scan, lx, ly, lz, floor_z, gcfg);
         voxel_project_to_2d(vgrid, grid);            // 3D column-max -> 2D

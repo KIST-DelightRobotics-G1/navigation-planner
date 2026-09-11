@@ -45,6 +45,13 @@ struct ObstacleVoxelGrid {
 void voxel_reset(ObstacleVoxelGrid& v, const ObstacleGridConfig& cfg,
                  float center_x, float center_y);
 
+// Rolling window: slide the grid so it stays centred on (center_x,center_y) as the robot
+// moves. The origin only moves in whole cells, so existing voxels keep their odom meaning
+// (accumulation stays valid); columns shifted in from outside are cleared to unknown, and
+// columns that fall off the far edge are dropped. Sub-cell moves are a no-op. Call before
+// decay/integrate each frame.
+void voxel_recenter(ObstacleVoxelGrid& v, float center_x, float center_y);
+
 // One temporal step: pull every voxel toward the prior (log_odds *= decay).
 void voxel_decay(ObstacleVoxelGrid& v, const ObstacleGridConfig& cfg);
 
