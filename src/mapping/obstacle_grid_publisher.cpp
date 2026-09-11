@@ -23,7 +23,7 @@ ObstacleGridPublisher::~ObstacleGridPublisher() = default;
 
 bool ObstacleGridPublisher::start(int domain_id, const std::string& network_interface,
                                   const std::string& grid_topic, const std::string& pose_topic,
-                                  const std::string& frame_id) {
+                                  const std::string& costmap_topic, const std::string& frame_id) {
     frame_ = frame_id;
     try {
         unitree::robot::ChannelFactory::Instance()->Init(domain_id, network_interface);  // no-op if inited
@@ -31,12 +31,14 @@ bool ObstacleGridPublisher::start(int domain_id, const std::string& network_inte
         grid_pub_->InitChannel();
         pose_pub_.reset(new PosePub(pose_topic));
         pose_pub_->InitChannel();
+        costmap_pub_.reset(new GridPub(costmap_topic));
+        costmap_pub_->InitChannel();
     } catch (const std::exception& e) {
         std::cerr << "[ObstacleGridPublisher] DDS init failed: " << e.what() << "\n";
         return false;
     }
     std::cout << "[ObstacleGridPublisher] grid=" << grid_topic << " pose=" << pose_topic
-              << " frame=" << frame_ << "\n";
+              << " costmap=" << costmap_topic << " frame=" << frame_ << "\n";
     return true;
 }
 
@@ -87,6 +89,28 @@ void ObstacleGridPublisher::publish(const ObstacleGrid& g, const ObstacleGridCon
     ps.pose().orientation().y(0.0);
     ps.pose().orientation().z(std::sin(g.robot_yaw * 0.5f));
     pose_pub_->Write(ps);
+}
+
+void ObstacleGridPublisher::publish_costmap(const Costmap& cm) {
+    if (cm.empty() || !costmap_pub_) return;
+
+    nav_msgs::msg::dds_::OccupancyGrid_ og;
+    og.header().frame_id() = frame_;
+    set_stamp(og.header().stamp(), 0);   // latest-transform (see publish() above)
+    og.info().resolution() = cm.resolution;
+    og.info().width()      = uint32_t(cm.n);
+    og.info().height()     = uint32_t(cm.n);
+    og.info().origin().position().x(cm.origin_x);
+    og.info().origin().position().y(cm.origin_y);
+    og.info().origin().position().z(0.0);
+    og.info().origin().orientation().w(1.0);
+
+    // cost 0..254 -> OccupancyGrid 0..100 (rviz costmap colour scheme reads this).
+    auto& data = og.data();
+    data.resize(std::size_t(cm.n) * cm.n);
+    for (std::size_t i = 0; i < cm.cells.size(); ++i)
+        data[i] = uint8_t(std::lround(cm.cells[i] * (100.0 / 254.0)));
+    costmap_pub_->Write(og);
 }
 
 } // namespace kist

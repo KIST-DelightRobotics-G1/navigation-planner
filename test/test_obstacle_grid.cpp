@@ -19,6 +19,8 @@
 #include "lio/lio_transform_producer.hpp"
 #include "mapping/obstacle_grid.hpp"
 #include "mapping/obstacle_voxel_grid.hpp"
+#include "mapping/costmap.hpp"
+#include "mapping/costmap_builder.hpp"
 #include "mapping/obstacle_grid_publisher.hpp"
 #include "unitree/unitree_state_reader.hpp"
 
@@ -109,6 +111,11 @@ int main(int argc, char** argv) {
     if (const char* v = std::getenv("RES"))      gcfg.resolution_m                = std::atof(v);  // xy cell size
     if (const char* v = std::getenv("RES_Z"))    gcfg.resolution_z_m              = std::atof(v);  // z voxel size
     if (const char* v = std::getenv("SELF_R"))   gcfg.self_radius_m               = std::atof(v);  // self-body radius
+
+    CostmapConfig ccfg;   // lethal/influence radii + cost shape
+    if (const char* v = std::getenv("LETHAL_R"))  ccfg.lethal_radius_m    = std::atof(v);  // robot radius
+    if (const char* v = std::getenv("INFLATE_R")) ccfg.influence_radius_m = std::atof(v);  // soft zone
+    CostmapBuilder cb;
     std::printf("[cfg] stand_h=%.2f  band=[floor+%.2f, lidar-%.2f]  alloc_max=%.2f  l_hit=%.2f l_miss=%.2f decay=%.3f res=%.2f/%.2f\n",
                 gcfg.pelvis_stand_height_m, gcfg.min_height_m, gcfg.upper_margin_below_lidar_m,
                 gcfg.max_height_m, gcfg.l_hit, gcfg.l_miss, gcfg.decay, gcfg.resolution_m, gcfg.resolution_z_m);
@@ -179,6 +186,8 @@ int main(int argc, char** argv) {
         if (now - last_pub >= std::chrono::milliseconds(100)) {   // ~10 Hz to rviz
             last_pub = now;
             pub.publish(grid, gcfg);
+            const Costmap cm = cb.build(grid, gcfg, ccfg);        // occupancy -> EDT costmap
+            pub.publish_costmap(cm);
         }
         if (now - last_draw >= std::chrono::seconds(1)) {   // single in-place line, no scroll
             last_draw = now;

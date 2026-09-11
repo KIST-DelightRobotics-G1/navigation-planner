@@ -121,7 +121,10 @@ target_link_libraries(lio_transform_producer PUBLIC transforms kinematics)
 # grid (3D ray-carve + floor-band) -> column-max projection to the 2D ObstacleGrid the
 # planner/costmap consume. Pure math + data; no threads (the builder, next stage, adds the
 # rolling window + worker). LiDAR-only for now (camera last).
-add_library(mapping STATIC src/mapping/obstacle_voxel_grid.cpp)
+add_library(mapping STATIC
+    src/mapping/obstacle_voxel_grid.cpp
+    src/mapping/edt.cpp
+    src/mapping/costmap_builder.cpp)
 target_include_directories(mapping PUBLIC include)   # LioCloud is a pure header — no link needed
 
 # obstacle_grid_publisher — bridge the ObstacleGrid to rviz2 over DDS (nav_msgs/

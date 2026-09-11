@@ -26,6 +26,17 @@ Visualization Manager:
       Color Scheme: map
       Draw Behind: false
       Alpha: 0.8
+    - Class: rviz_default_plugins/Map
+      Name: Costmap
+      Enabled: true
+      Topic:
+        Value: /costmap
+        Depth: 1
+        Durability Policy: Volatile
+        Reliability Policy: Reliable
+      Color Scheme: costmap
+      Draw Behind: false
+      Alpha: 0.6
     - Class: rviz_default_plugins/PointCloud2
       Name: RegisteredScan
       Enabled: true
