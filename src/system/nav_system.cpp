@@ -2,16 +2,11 @@
 
 #include "common/config.hpp"
 #include "common/dds_config.hpp"
-#include "route_planner/perception/costmap_builder/clearance.hpp"
 #include "unitree/unitree_state_reader.hpp"
 
-#include <chrono>
-#include <cmath>
 #include <csignal>
-#include <cstdio>
 #include <cstdlib>
 #include <iostream>
-#include <limits>
 
 namespace kist {
 
@@ -23,8 +18,7 @@ bool NavSystem::start(const std::string& config_path) {
     const int domain = root["unitree"]["domain_id"].as<int>(0);
     if (!apply_dds_config(root)) return false;
 
-    // mapper_ (gcfg/ccfg) + planner_ (acfg/scfg) keep their calibrated defaults (real-G1 tuned).
-
+    // ── shared resources ──────────────────────────────────────────────────────
     auto& sr = UnitreeStateReader::instance();
     if (!sr.start(domain, "")) { std::cerr << "[NavSystem] lowstate reader failed\n"; return false; }
     sr_started_ = true;
@@ -48,26 +42,25 @@ bool NavSystem::start(const std::string& config_path) {
 
     if (!pub_.start(domain)) { std::cerr << "[NavSystem] publisher failed\n"; stop(); return false; }
     pub_started_ = true;
-
-    // Env tuning for the follower (sweep without rebuilding). Terminal dock behavior
-    // (align/approach/standoff) is per-destination now (config), not env.
-    {
-        FollowConfig fc = controller_.config();
-        if (const char* v = std::getenv("NAV_VMAX")) fc.v_max = std::atof(v);
-        controller_.set_config(fc);
-    }
-    // Driving is opt-in: only NAV_DRIVE=1 arms the Twist output. Default = preview (no motion).
-    drive_enabled_ = [] { const char* v = std::getenv("NAV_DRIVE"); return v && v[0] == '1'; }();
     if (!cmd_pub_.start(domain)) { std::cerr << "[NavSystem] cmd publisher failed\n"; stop(); return false; }
+    cmd_pub_started_ = true;
 
-    running_ = true;
-    perc_thread_ = std::thread(&NavSystem::perception_run, this);
-    plan_thread_ = std::thread(&NavSystem::planner_run, this);
-    ctrl_thread_ = std::thread(&NavSystem::controller_run, this);
-    viz_thread_  = std::thread(&NavSystem::viz_run, this);
+    // ── worker config (env) ───────────────────────────────────────────────────
+    // Follower cruise speed is env-tunable; terminal dock behavior is per-destination (config).
+    FollowConfig fc;
+    if (const char* v = std::getenv("NAV_VMAX")) fc.v_max = std::atof(v);
+    // Driving is opt-in: only NAV_DRIVE=1 arms the Twist output. Default = preview (no motion).
+    const bool drive_enabled = [] { const char* v = std::getenv("NAV_DRIVE"); return v && v[0] == '1'; }();
+
+    // ── assemble + launch the workers ─────────────────────────────────────────
+    goal_src_.bind(&gr_.goal_buf, &goalcmd_.result());
+    perc_.start(rx_, prod_, grid_buf_, costmap_buf_);
+    plan_.start(costmap_buf_, goal_src_, path_buf_);
+    ctrl_.start(path_buf_, prod_, costmap_buf_, goal_src_, cmd_buf_, cmd_pub_, drive_enabled, fc);
+    viz_.start(grid_buf_, costmap_buf_, path_buf_, pub_, perc_.gcfg());
 
     std::cout << "[NavSystem] up: perception + planning + controller + viz (domain " << domain << ").\n";
-    if (drive_enabled_)
+    if (drive_enabled)
         std::cout << "  *** NAV_DRIVE=1 — Twist IS published: THE ROBOT WILL MOVE. estop ready. ***\n";
     else
         std::cout << "  controller PREVIEW only (no Twist, robot will NOT move). Set NAV_DRIVE=1 to drive.\n";
@@ -76,106 +69,13 @@ bool NavSystem::start(const std::string& config_path) {
     return true;
 }
 
-// Control loop (~20 Hz): gather the freshest inputs from the buffers, hand them to the
-// LocalController (which owns the control logic), then EITHER publish the command as a Twist
-// (NAV_DRIVE=1 -> robot moves) OR just preview it. Stale inputs (>500 ms) are nulled so the
-// controller stops safely; the control decision itself lives in LocalController::step.
-void NavSystem::controller_run() {
-    auto last_print = std::chrono::steady_clock::now();
-    while (running_) {
-        const auto t0 = std::chrono::steady_clock::now();
-
-        auto pathT = path_buf_.GetDataWithTime();
-        auto rtT   = prod_.out_buf.GetDataWithTime();
-        auto cm    = costmap_buf_.GetData();
-        auto goal  = active_goal();
-        const Path*            path = (pathT.HasData() && pathT.GetAgeMs() < 500.0) ? pathT.data.get() : nullptr;
-        const RobotTransforms* rt   = (rtT.HasData()  && rtT.GetAgeMs()  < 500.0) ? rtT.data.get()  : nullptr;
-
-        FollowPhase phase = FollowPhase::Arrived;
-        NavCommand  cmd   = controller_.step(path, rt, cm.get(), goal ? &*goal : nullptr, &phase);
-
-        cmd_buf_.SetData(cmd);
-        if (drive_enabled_) cmd_pub_.publish(cmd);          // Twist -> gearsonic (robot moves)
-
-        if (t0 - last_print >= std::chrono::milliseconds(500)) {
-            last_print = t0;
-            const char* ps = phase == FollowPhase::Blocked     ? "BLOCKED"
-                           : phase == FollowPhase::Aligning    ? "align"
-                           : phase == FollowPhase::Approaching ? "approach"
-                           : phase == FollowPhase::Arrived     ? "arrived" : "drive";
-            std::printf("[controller] vx=% .2f vy=% .2f vyaw=% .2f  %-7s  %s\n",
-                        cmd.vx, cmd.vy, cmd.vyaw, ps, drive_enabled_ ? "SENT" : "(preview)");
-        }
-        std::this_thread::sleep_until(t0 + std::chrono::milliseconds(50));   // ~20 Hz
-    }
-}
-
-void NavSystem::perception_run() {
-    int64_t last_stamp = 0;
-    while (running_) {
-        auto scan = rx_.cloud_buf.GetData();
-        if (!scan || scan->stamp_ns == last_stamp) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(5));
-            continue;
-        }
-        last_stamp = scan->stamp_ns;
-        auto rt = prod_.nearest(scan->stamp_ns);
-        if (!rt) continue;                            // no pose for this scan
-        mapper_.update_map(*scan, *rt);
-        grid_buf_.SetData(mapper_.grid());
-        costmap_buf_.SetData(mapper_.costmap());
-    }
-}
-
-// Freshest goal across both channels (whichever DataBuffer was set most recently): rviz
-// clicks (gr_, ad-hoc, dock off) and named goal commands (goalcmd_, catalog + dock). Callers
-// must check Goal::valid — a cancel command lands as a fresh valid=false goal (= stop).
-std::optional<Goal> NavSystem::active_goal() {
-    auto a = gr_.goal_buf.GetDataWithTime();
-    auto b = goalcmd_.result().GetDataWithTime();
-    if (a.HasData() && b.HasData()) return (a.GetAgeMs() <= b.GetAgeMs()) ? *a.data : *b.data;
-    if (a.HasData()) return *a.data;
-    if (b.HasData()) return *b.data;
-    return std::nullopt;
-}
-
-void NavSystem::planner_run() {
-    while (running_) {
-        auto goal = active_goal();
-        auto cm   = costmap_buf_.GetData();
-        if (goal && goal->valid && cm && !cm->empty())
-            path_buf_.SetData(planner_.plan(*cm, {cm->robot_x, cm->robot_y}, {goal->x, goal->y}));
-        else
-            path_buf_.SetData(Path{});   // no / cancelled goal -> empty path -> controller stops
-        std::this_thread::sleep_for(std::chrono::milliseconds(200));   // ~5 Hz replan
-    }
-}
-
-void NavSystem::viz_run() {
-    while (running_) {
-        if (auto grid = grid_buf_.GetData()) pub_.publish(*grid, mapper_.gcfg);
-        if (auto cm = costmap_buf_.GetData(); cm && !cm->empty()) {
-            pub_.publish_costmap(*cm);
-            const auto clr = clearance_field(*cm);
-            pub_.publish_clearance(*cm, clr);
-            pub_.publish_medial(medial_axis(*cm, clr));
-        }
-        if (auto path = path_buf_.GetData()) {
-            pub_.publish_path(path->waypoints, mapper_.gcfg.resolution_m);
-            pub_.publish_path_raw(path->raw_waypoints);
-        }
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));   // ~10 Hz to rviz
-    }
-}
-
 void NavSystem::stop() {
-    running_ = false;
-    if (perc_thread_.joinable()) perc_thread_.join();
-    if (plan_thread_.joinable()) plan_thread_.join();
-    if (ctrl_thread_.joinable()) ctrl_thread_.join();
-    if (viz_thread_.joinable())  viz_thread_.join();
-    cmd_pub_.stop();   // final zero Twist (stop) then close — nothing lingers on the wire
+    // Workers first — they reference the readers/publishers/buffers below.
+    viz_.stop();
+    ctrl_.stop();
+    plan_.stop();
+    perc_.stop();
+    if (cmd_pub_started_) { cmd_pub_.stop(); cmd_pub_started_ = false; }   // final zero Twist
     if (goalcmd_started_) { goalcmd_.stop(); goalcmd_started_ = false; }
     if (destpub_started_) { destpub_.stop(); destpub_started_ = false; }
     if (gr_started_) { gr_.stop(); gr_started_ = false; }

@@ -1,19 +1,18 @@
 #pragma once
 
-// NavSystem — the deployment facade (mirrors kist-gearsonic-inference's GearsonicInference).
-// Owns the readers/producer + the RoutePlanner computation + the DDS publisher, and runs the
-// threads (folder separation is code organization; threading lives here):
+// NavSystem — the deployment facade / ASSEMBLER (mirrors kist-gearsonic-inference's
+// GearsonicInference). It owns the shared resources (readers, producer, publishers, buffers,
+// goal channels) and the workers, wires them together, and start/stops them. There are NO loops
+// or control logic here — each worker owns its thread + loop, and the compute logic lives in the
+// domain stages (ObstacleMapper / RoutePlanner / LocalController) the workers drive:
 //
-//   perception thread : registered scan + stamp-matched pose -> RoutePlanner::update_map
-//                       -> grid + costmap snapshots on buffers
-//   planner thread    : costmap + goal -> RoutePlanner::plan -> path buffer
-//   viz thread        : buffers -> rviz (grid / costmap / clearance / medial / path)
-//
-// PERCEPTION + PLANNING + VIZ only — it does NOT command the robot (no Twist). The local
-// controller (path -> velocity) is added later, behind its own safety.
+//   perception : scan + pose      -> ObstacleMapper  -> grid + costmap buffers
+//   planner    : costmap + goal   -> RoutePlanner    -> path buffer
+//   controller : path+pose+cm+goal -> LocalController -> NavCommand (-> Twist if NAV_DRIVE=1)
+//   viz        : buffers          -> rviz
 
 #include "common/data_buffer.hpp"
-#include "controller/local_controller.hpp"
+#include "controller/nav_command.hpp"
 #include "controller/nav_command_publisher.hpp"
 #include "goal_generation/destination_publisher.hpp"
 #include "goal_generation/goal_command_receiver.hpp"
@@ -21,13 +20,17 @@
 #include "lio/lio_transform_producer.hpp"
 #include "mapping/obstacle_grid_publisher.hpp"
 #include "planning/goal_receiver.hpp"
-#include "route_planner/perception/obstacle_mapper.hpp"
-#include "route_planner/planner/route_planner.hpp"
+#include "route_planner/perception/costmap_builder/costmap.hpp"
+#include "route_planner/perception/obstacle_grid_builder/obstacle_grid.hpp"
+#include "route_planner/perception/perception_worker.hpp"
+#include "route_planner/planner/astar_planner/path.hpp"
+#include "route_planner/planner/planner_worker.hpp"
+#include "controller/controller_worker.hpp"
+#include "system/goal_source.hpp"
+#include "system/viz_worker.hpp"
 
 #include <atomic>
-#include <optional>
 #include <string>
-#include <thread>
 
 namespace kist {
 
@@ -46,17 +49,7 @@ public:
     bool quit_requested() const { return quit_; }
 
 private:
-    void perception_run();
-    void planner_run();
-    void controller_run();
-    void viz_run();
-
-    // Freshest goal from either channel: rviz ad-hoc (gr_) or named command (goalcmd_).
-    std::optional<Goal> active_goal();
-
-    ObstacleMapper        mapper_;     // perception: scan -> grid + costmap
-    RoutePlanner          planner_;    // planning: costmap + goal -> path
-    LocalController        controller_;
+    // ── shared resources (owned here, injected into the workers) ──
     LioTransformProducer  prod_;
     LioReceiver           rx_;
     GoalReceiver          gr_;         // rviz "2D Goal Pose" (rt/goal_pose) — ad-hoc, no dock
@@ -64,19 +57,24 @@ private:
     GoalCommandReceiver   goalcmd_;    // named goals from a peer/LLM (rt/kist/nav/goal)
     ObstacleGridPublisher pub_;
     NavCommandPublisher   cmd_pub_;
-    bool                  drive_enabled_ = false;   // NAV_DRIVE=1 arms Twist output
 
     DataBuffer<ObstacleGrid> grid_buf_;
     DataBuffer<Costmap>      costmap_buf_;
     DataBuffer<Path>         path_buf_;
-    DataBuffer<NavCommand>   cmd_buf_;      // follower output (NOT sent to the robot in this build)
+    DataBuffer<NavCommand>   cmd_buf_;
+    GoalSource               goal_src_;
 
-    std::thread       perc_thread_, plan_thread_, ctrl_thread_, viz_thread_;
-    std::atomic<bool> running_{false};
+    // ── workers (each owns its thread + loop; driven off the buffers above) ──
+    PerceptionWorker perc_;
+    PlannerWorker    plan_;
+    ControllerWorker ctrl_;
+    VizWorker        viz_;
+
     std::atomic<bool> quit_{false};
 
     bool sr_started_{false}, rx_started_{false}, gr_started_{false},
-         destpub_started_{false}, goalcmd_started_{false}, pub_started_{false};
+         destpub_started_{false}, goalcmd_started_{false},
+         pub_started_{false}, cmd_pub_started_{false};
 };
 
 } // namespace kist

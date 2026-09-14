@@ -163,7 +163,12 @@ target_link_libraries(controller PUBLIC route_planner unitree_sdk2)   # Costmap 
 
 # system/ — the deployment facade: owns the readers/producer + RoutePlanner + publisher, and
 # runs the perception / planner / viz threads. The kist-navigation-planner binary runs this.
-add_library(nav_system STATIC src/system/nav_system.cpp)
+add_library(nav_system STATIC
+    src/system/nav_system.cpp
+    src/route_planner/perception/perception_worker.cpp   # workers live in their domain folders,
+    src/route_planner/planner/planner_worker.cpp          # but the worker layer (lio/DDS/thread) is
+    src/controller/controller_worker.cpp                  # compiled into nav_system so the domain
+    src/system/viz_worker.cpp)                            # libs stay pure computation (Eigen only).
 target_include_directories(nav_system PUBLIC include)
 target_link_libraries(nav_system PUBLIC
     route_planner controller goal_receiver goal_generation obstacle_grid_publisher
