@@ -97,7 +97,7 @@ bool NavSystem::start(const std::string& config_path) {
     perc_.start(rx_, prod_, grid_buf_, costmap_buf_);
     plan_.start(costmap_buf_, goal_src_, path_buf_);
     ctrl_.start(path_buf_, prod_, costmap_buf_, goal_src_, cmd_buf_, cmd_pub_, drive_enabled, fc);
-    viz_.start(grid_buf_, costmap_buf_, path_buf_, pub_, perc_.gcfg(), prod_, rx_);
+    viz_.start(grid_buf_, costmap_buf_, path_buf_, pub_, perc_.gcfg(), prod_, rx_, mapodom_buf_);
 
     std::cout << "[NavSystem] up: perception + planning + controller + viz (domain " << domain << ").\n";
     if (drive_enabled)

@@ -7,6 +7,7 @@
 #include "common/data_buffer.hpp"
 #include "lio/lio_receiver.hpp"
 #include "lio/lio_transform_producer.hpp"
+#include "localization/map_odom.hpp"
 #include "mapping/obstacle_grid_publisher.hpp"
 #include "route_planner/perception/costmap_builder/costmap.hpp"
 #include "route_planner/perception/obstacle_grid_builder/obstacle_grid.hpp"
@@ -23,7 +24,7 @@ public:
 
     void start(DataBuffer<ObstacleGrid>& grid_buf, DataBuffer<Costmap>& costmap_buf,
                DataBuffer<Path>& path_buf, ObstacleGridPublisher& pub, ObstacleGridConfig gcfg,
-               LioTransformProducer& prod, LioReceiver& rx);
+               LioTransformProducer& prod, LioReceiver& rx, DataBuffer<MapOdom>& mapodom);
     void stop();
 
 private:
@@ -36,6 +37,8 @@ private:
     ObstacleGridPublisher*    pub_         = nullptr;
     LioTransformProducer*     prod_        = nullptr;   // lidar/pelvis pose + sway
     LioReceiver*              rx_          = nullptr;   // registered scan (for the sway cloud)
+    DataBuffer<MapOdom>*      mapodom_     = nullptr;   // map->odom (for NAV_SURVEY map pose)
+    bool                      survey_      = false;     // NAV_SURVEY=1: print robot map pose
 
     std::thread       thread_;
     std::atomic<bool> running_{false};
