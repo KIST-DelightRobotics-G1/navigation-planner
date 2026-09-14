@@ -4,9 +4,12 @@
 #include "common/dds_config.hpp"
 #include "unitree/unitree_state_reader.hpp"
 
+#include <Eigen/Geometry>
+#include <cmath>
 #include <csignal>
 #include <cstdlib>
 #include <iostream>
+#include <string>
 
 namespace kist {
 
@@ -52,8 +55,25 @@ bool NavSystem::start(const std::string& config_path) {
     // Driving is opt-in: only NAV_DRIVE=1 arms the Twist output. Default = preview (no motion).
     const bool drive_enabled = [] { const char* v = std::getenv("NAV_DRIVE"); return v && v[0] == '1'; }();
 
+    // Localization: relocalize the live odom against the prior PCD -> map->odom. Non-fatal if
+    // the prior map is missing — the system still runs (rviz odom goals work; named/map goals
+    // stay on hold until a map is present). Seed is a config guess for now (auto init = later).
+    {
+        const std::string prior_map = root["localization"]["prior_map"].as<std::string>("maps/prior_map.pcd");
+        Eigen::Matrix4f seed = Eigen::Matrix4f::Identity();
+        if (auto s = root["localization"]["seed"]) {
+            const float sx = s["x"].as<float>(0.f), sy = s["y"].as<float>(0.f);
+            const float syaw = s["yaw_deg"].as<float>(0.f) * float(M_PI) / 180.f;
+            seed.block<3,3>(0,0) = Eigen::AngleAxisf(syaw, Eigen::Vector3f::UnitZ()).toRotationMatrix();
+            seed(0,3) = sx; seed(1,3) = sy;
+        }
+        if (!loc_.start(rx_, prior_map, seed, mapodom_buf_))
+            std::cerr << "[NavSystem] localization disabled (no prior map at " << prior_map
+                      << "); named/map goals need it.\n";
+    }
+
     // ── assemble + launch the workers ─────────────────────────────────────────
-    goal_src_.bind(&gr_.goal_buf, &goalcmd_.result());
+    goal_src_.bind(&gr_.goal_buf, &goalcmd_.result(), &mapodom_buf_);
     perc_.start(rx_, prod_, grid_buf_, costmap_buf_);
     plan_.start(costmap_buf_, goal_src_, path_buf_);
     ctrl_.start(path_buf_, prod_, costmap_buf_, goal_src_, cmd_buf_, cmd_pub_, drive_enabled, fc);
@@ -75,6 +95,7 @@ void NavSystem::stop() {
     ctrl_.stop();
     plan_.stop();
     perc_.stop();
+    loc_.stop();
     if (cmd_pub_started_) { cmd_pub_.stop(); cmd_pub_started_ = false; }   // final zero Twist
     if (goalcmd_started_) { goalcmd_.stop(); goalcmd_started_ = false; }
     if (destpub_started_) { destpub_.stop(); destpub_started_ = false; }

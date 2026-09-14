@@ -40,6 +40,7 @@ void GoalReceiver::on_goal(const void* message) {
                              1.0 - 2.0 * (q.y()*q.y() + q.z()*q.z())));
     g.has_yaw = true;         // rviz supplies an orientation ...
     g.valid   = true;
+    g.in_map  = false;        // rviz clicks are in the displayed odom frame -> no conversion
     g.name    = "";           // ad-hoc, not a catalog destination
     // ... but dock stays default (align/approach OFF) -> just drive there and stop.
     goal_buf.SetData(g);

@@ -168,10 +168,11 @@ add_library(nav_system STATIC
     src/route_planner/perception/perception_worker.cpp   # workers live in their domain folders,
     src/route_planner/planner/planner_worker.cpp          # but the worker layer (lio/DDS/thread) is
     src/controller/controller_worker.cpp                  # compiled into nav_system so the domain
-    src/system/viz_worker.cpp)                            # libs stay pure computation (Eigen only).
+    src/localization/localization_worker.cpp              # libs stay pure computation (Eigen/PCL only).
+    src/system/viz_worker.cpp)
 target_include_directories(nav_system PUBLIC include)
 target_link_libraries(nav_system PUBLIC
-    route_planner controller goal_receiver goal_generation obstacle_grid_publisher
+    route_planner controller goal_receiver goal_generation localization obstacle_grid_publisher
     lio_receiver lio_transform_producer unitree_state_reader yaml-cpp)
 
 add_executable(kist-navigation-planner src/main.cpp)

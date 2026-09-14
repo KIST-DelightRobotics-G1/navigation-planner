@@ -20,3 +20,11 @@ unitree:
 # Named navigation destinations live in a SEPARATE catalog: config/destinations.yaml
 # (loaded by goal_generation's DestinationPublisher + GoalCommandReceiver). The robot is
 # commanded to one by name over rt/kist/nav/goal; see that file for the entries + dock tuning.
+
+# Localization: relocalize the live LIO odom against a prior PCD map -> map->odom, so the
+# map-frame destinations above land on the same physical spot every run. Missing prior_map =
+# localization disabled (rviz odom goals still work). `seed` is the initial map<-odom guess
+# (x,y m, yaw deg); a rough value is enough — GICP refines it. Auto init (no seed) comes later.
+localization:
+  prior_map: maps/prior_map.pcd
+  seed: { x: 0.0, y: 0.0, yaw_deg: 0.0 }

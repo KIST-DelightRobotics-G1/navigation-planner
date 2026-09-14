@@ -18,6 +18,8 @@
 #include "goal_generation/goal_command_receiver.hpp"
 #include "lio/lio_receiver.hpp"
 #include "lio/lio_transform_producer.hpp"
+#include "localization/localization_worker.hpp"
+#include "localization/map_odom.hpp"
 #include "mapping/obstacle_grid_publisher.hpp"
 #include "planning/goal_receiver.hpp"
 #include "route_planner/perception/costmap_builder/costmap.hpp"
@@ -62,13 +64,15 @@ private:
     DataBuffer<Costmap>      costmap_buf_;
     DataBuffer<Path>         path_buf_;
     DataBuffer<NavCommand>   cmd_buf_;
+    DataBuffer<MapOdom>      mapodom_buf_;   // relocalizer output (map->odom); empty until locked
     GoalSource               goal_src_;
 
     // ── workers (each owns its thread + loop; driven off the buffers above) ──
-    PerceptionWorker perc_;
-    PlannerWorker    plan_;
-    ControllerWorker ctrl_;
-    VizWorker        viz_;
+    LocalizationWorker loc_;
+    PerceptionWorker   perc_;
+    PlannerWorker      plan_;
+    ControllerWorker   ctrl_;
+    VizWorker          viz_;
 
     std::atomic<bool> quit_{false};
 

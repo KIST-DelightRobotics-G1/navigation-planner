@@ -17,10 +17,12 @@
 namespace kist {
 
 struct Goal {
-    float x = 0.0f, y = 0.0f;   // destination in the world/map frame (m)
-    float yaw = 0.0f;           // finish heading to align to on arrival (rad, world)
+    float x = 0.0f, y = 0.0f;   // destination position (m); frame given by in_map
+    float yaw = 0.0f;           // finish heading to align to on arrival (rad)
     bool  has_yaw = false;      // whether a finish yaw was supplied (else align is skipped)
     bool  valid = false;        // false = no active goal (robot idle / cancel)
+    bool  in_map = false;       // true = x/y/yaw are in the map frame (named/catalog goal, needs
+                                // map->odom); false = already odom (rviz ad-hoc), pass through
 
     std::string name;           // source destination name (destinations.yaml), for logging/mission
     DockConfig  dock;           // per-destination terminal behavior (align / approach / standoff)
