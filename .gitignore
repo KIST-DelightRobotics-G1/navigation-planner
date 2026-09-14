@@ -87,3 +87,7 @@ state/
 
 # LIO cloud dumps
 *.pcd
+
+# Python bytecode cache (ros2 launch generates lio_engine/__pycache__)
+__pycache__/
+*.pyc
