@@ -20,6 +20,7 @@
 #include "lio/lio_transform_producer.hpp"
 #include "localization/localization_worker.hpp"
 #include "localization/map_odom.hpp"
+#include "localization/uwb_receiver.hpp"
 #include "mapping/obstacle_grid_publisher.hpp"
 #include "planning/goal_receiver.hpp"
 #include "route_planner/perception/costmap_builder/costmap.hpp"
@@ -57,6 +58,7 @@ private:
     GoalReceiver          gr_;         // rviz "2D Goal Pose" (rt/goal_pose) — ad-hoc, no dock
     DestinationPublisher  destpub_;    // advertises the catalog (rt/kist/nav/destinations)
     GoalCommandReceiver   goalcmd_;    // named goals from a peer/LLM (rt/kist/nav/goal)
+    UwbReceiver           uwb_;        // UWB fixes (rt/kist/uwb/pose) — localization seed only
     ObstacleGridPublisher pub_;
     NavCommandPublisher   cmd_pub_;
 
@@ -77,7 +79,7 @@ private:
     std::atomic<bool> quit_{false};
 
     bool sr_started_{false}, rx_started_{false}, gr_started_{false},
-         destpub_started_{false}, goalcmd_started_{false},
+         destpub_started_{false}, goalcmd_started_{false}, uwb_started_{false},
          pub_started_{false}, cmd_pub_started_{false};
 };
 

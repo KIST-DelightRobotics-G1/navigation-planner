@@ -12,6 +12,7 @@
 #include "common/config.hpp"
 #include "common/dds_config.hpp"
 #include "lio/lio_receiver.hpp"
+#include "localization/uwb_receiver.hpp"
 
 #include <atomic>
 #include <chrono>
@@ -57,6 +58,9 @@ int main(int argc, char** argv) {
 
     LioReceiver rx;                                  // odom_hook unused: we only need the cloud
     if (!rx.start(domain)) { std::fprintf(stderr, "[map_recorder] LIO receiver failed\n"); return 1; }
+    UwbReceiver uwb;                                 // records the map-origin UWB (for the deploy seed)
+    const bool uwb_ok = uwb.start(domain);
+    if (!uwb_ok) std::fprintf(stderr, "[map_recorder] UWB receiver failed — no sidecar will be written\n");
     std::printf("[map_recorder] recording rt/cloud_registered_1 -> %s (voxel %.3f m). "
                 "Drive the environment, then Ctrl+C to save.\n", out_path.c_str(), leaf);
 
@@ -64,9 +68,17 @@ int main(int argc, char** argv) {
     grid.reserve(1u << 20);
     int64_t     last_stamp = 0;
     uint64_t    scans = 0, raw_points = 0;
+    bool        uwb_have = false;                    // first fix ~= map origin (robot at LIO boot)
+    float       uwb_ox = 0.f, uwb_oy = 0.f;
     auto        last_print = std::chrono::steady_clock::now();
 
     while (!g_stop) {
+        if (uwb_ok && !uwb_have) {                   // capture the map-origin UWB once
+            if (auto fx = uwb.fix.GetData()) {
+                uwb_ox = fx->x; uwb_oy = fx->y; uwb_have = true;
+                std::printf("[map_recorder] map-origin UWB = (%.3f, %.3f)\n", uwb_ox, uwb_oy);
+            }
+        }
         auto cloud = rx.cloud_buf.GetData();
         if (!cloud || cloud->stamp_ns == last_stamp) {
             std::this_thread::sleep_for(std::chrono::milliseconds(5));
@@ -110,5 +122,20 @@ int main(int argc, char** argv) {
     std::fclose(f);
     std::printf("[map_recorder] saved %zu points (from %llu scans, %lluk raw) -> %s\n",
                 N, (unsigned long long)scans, (unsigned long long)(raw_points/1000), out_path.c_str());
+
+    // UWB sidecar: map-origin UWB (x y) next to the PCD, for the deploy-time localization seed.
+    std::string sidecar = out_path;
+    const auto dot = sidecar.rfind(".pcd");
+    if (dot != std::string::npos && dot == sidecar.size() - 4) sidecar.replace(dot, 4, ".uwb");
+    else sidecar += ".uwb";
+    if (uwb_have) {
+        if (FILE* uf = std::fopen(sidecar.c_str(), "w")) {
+            std::fprintf(uf, "%.4f %.4f\n", uwb_ox, uwb_oy);
+            std::fclose(uf);
+            std::printf("[map_recorder] wrote UWB map-origin (%.3f, %.3f) -> %s\n", uwb_ox, uwb_oy, sidecar.c_str());
+        }
+    } else {
+        std::printf("[map_recorder] no UWB fix seen — sidecar not written (deploy seed falls back to config).\n");
+    }
     return 0;
 }

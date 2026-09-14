@@ -172,8 +172,8 @@ add_library(nav_system STATIC
     src/system/viz_worker.cpp)
 target_include_directories(nav_system PUBLIC include)
 target_link_libraries(nav_system PUBLIC
-    route_planner controller goal_receiver goal_generation localization obstacle_grid_publisher
-    lio_receiver lio_transform_producer unitree_state_reader yaml-cpp)
+    route_planner controller goal_receiver goal_generation localization uwb_receiver
+    obstacle_grid_publisher lio_receiver lio_transform_producer unitree_state_reader yaml-cpp)
 
 add_executable(kist-navigation-planner src/main.cpp)
 target_link_libraries(kist-navigation-planner PRIVATE nav_system)
@@ -218,13 +218,19 @@ target_link_libraries(test_obstacle_grid PRIVATE
 # map_recorder — accumulate registered scans (rt/cloud_registered_1) into a voxel grid and
 # save a prior PCD map on Ctrl+C (our branch's FAST-LIO pcd_save is dead). ROS-free.
 add_executable(map_recorder test/tool_map_recorder.cpp)
-target_link_libraries(map_recorder PRIVATE lio_receiver unitree_sdk2 yaml-cpp)
+target_link_libraries(map_recorder PRIVATE lio_receiver uwb_receiver unitree_sdk2 yaml-cpp)
 
 # localization/ — relocalizer: register a bounded local submap (from rt/cloud_registered_1,
 # odom) against the prior PCD map (map) via PCL GICP -> map->odom. PCL is hidden behind a PIMPL.
 add_library(localization STATIC src/localization/relocalizer.cpp)
 target_include_directories(localization PUBLIC include ${PCL_INCLUDE_DIRS})
 target_link_libraries(localization PUBLIC Eigen3::Eigen ${PCL_LIBRARIES})
+
+# uwb_receiver — UWB fixes (rt/kist/uwb/pose, PoseStamped) for the localization seed. Own lib
+# (DDS I/O) so the localization lib stays pure PCL computation. No custom IDL, no ext link.
+add_library(uwb_receiver STATIC src/localization/uwb_receiver.cpp)
+target_include_directories(uwb_receiver PUBLIC include)
+target_link_libraries(uwb_receiver PUBLIC unitree_sdk2 Eigen3::Eigen)
 
 # reloc_check — v0 validation: GICP a live submap onto the prior map from a manual seed;
 # prints fitness + T_map_odom and dumps reloc_overlay.pcd for a pcl_viewer overlap check.

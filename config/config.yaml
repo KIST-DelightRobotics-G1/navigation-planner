@@ -23,8 +23,15 @@ unitree:
 
 # Localization: relocalize the live LIO odom against a prior PCD map -> map->odom, so the
 # map-frame destinations above land on the same physical spot every run. Missing prior_map =
-# localization disabled (rviz odom goals still work). `seed` is the initial map<-odom guess
-# (x,y m, yaw deg); a rough value is enough — GICP refines it. Auto init (no seed) comes later.
+# localization disabled (rviz odom goals still work).
+#
+# Seed (initial map<-odom guess for GICP): computed from UWB when available — the recorded
+# map-origin UWB (sidecar maps/prior_map.uwb, written by map_recorder) vs the live boot fix
+# gives the translation; you MATCH the boot heading so the yaw is seed.yaw_deg (usually 0).
+#   seed{x,y,yaw_deg} : fixed fallback used when UWB / sidecar is unavailable. yaw_deg doubles
+#                       as the map<-odom heading for the UWB seed (match your boot heading).
+#   map_uwb_yaw_deg   : map<-UWB rotation applied to the UWB translation (0 if map axes ~ UWB axes).
 localization:
   prior_map: maps/prior_map.pcd
   seed: { x: 0.0, y: 0.0, yaw_deg: 0.0 }
+  map_uwb_yaw_deg: 0.0
