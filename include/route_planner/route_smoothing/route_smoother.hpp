@@ -16,8 +16,9 @@
 namespace kist {
 
 struct RouteSmoothConfig {
-    float d_safe_m = 0.10f;               // required clearance (m) beyond the costmap's lethal
+    float d_safe_m = 0.25f;               // required clearance (m) beyond the costmap's lethal
                                           // inflation — a straight/arc keeps EDT >= this.
+                                          // 0.25 tuned on the real G1 (turns stay off walls).
     float corner_angle_min_deg = 10.0f;   // |turn| below this -> keep straight (no arc)
     float r_min_m  = 0.20f;               // arc-radius search: r_max down to r_min, first
     float r_max_m  = 2.00f;               // (largest) feasible R wins = minimum curvature.

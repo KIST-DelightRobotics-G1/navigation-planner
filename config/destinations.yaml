@@ -14,6 +14,16 @@
 #   yaw_deg  finish heading, degrees CCW from +x. This is the direction the robot
 #            faces AFTER reaching (x, y) — the arrival pose, not the travel heading.
 #
+# Per-destination DOCK behavior (all optional, default OFF -> just stop at arrival_tol):
+#   align       true = rotate in place to yaw_deg on arrival.
+#   approach    true = after aligning, creep straight forward until the object ahead is
+#               standoff_m away, then stop ("stop X in front of the fridge").
+#   standoff_m  approach stop distance to the nearest lethal cell ahead (default 0.40).
+#               NOTE: lethal is inflated ~robot_radius from the real object, so the physical
+#               gap to the object surface is roughly standoff_m + inflation. Tune by measuring.
+#   trigger_m   approach only engages if an object is within this ahead (default 1.20).
+#   speed       approach creep speed, m/s (default 0.35; loco floor ~0.2).
+#
 # Replace the examples below with the real surveyed positions on the G1.
 
 destinations:
@@ -21,8 +31,12 @@ destinations:
     x: 0.0
     y: 0.0
     yaw_deg: 0.0
+    # home: no dock (just park at the point).
 
   - name: fridge
     x: 4.00
     y: 0.8
     yaw_deg: -99          # face back toward -x on arrival
+    align: true           # turn to face the fridge
+    approach: true        # then creep up to it
+    standoff_m: 0.18      # stop 0.18 m from the (inflated) fridge — tuned on the real G1

@@ -29,6 +29,12 @@ bool GoalCommandReceiver::load(const std::string& path) {
             g.yaw     = d["yaw_deg"].as<float>(0.0f) * float(M_PI) / 180.0f;   // deg -> rad
             g.has_yaw = true;
             g.valid   = true;
+            // Per-destination terminal (dock) behavior — all optional, default OFF.
+            g.dock.align      = d["align"].as<bool>(false);
+            g.dock.approach   = d["approach"].as<bool>(false);
+            g.dock.standoff_m = d["standoff_m"].as<float>(g.dock.standoff_m);
+            g.dock.trigger_m  = d["trigger_m"].as<float>(g.dock.trigger_m);
+            g.dock.speed      = d["speed"].as<float>(g.dock.speed);
             if (!g.name.empty()) catalog_[g.name] = g;
         }
     } catch (const std::exception& e) {

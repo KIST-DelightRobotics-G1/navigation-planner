@@ -16,3 +16,7 @@ unitree:
   # (The SDK ignores CYCLONEDDS_URI when an interface is passed in code, so the
   # runners route everything through the XML — see common/dds_config.hpp.)
   dds_config: config/cyclonedds.xml
+
+# Named navigation destinations live in a SEPARATE catalog: config/destinations.yaml
+# (loaded by goal_generation's DestinationPublisher + GoalCommandReceiver). The robot is
+# commanded to one by name over rt/kist/nav/goal; see that file for the entries + dock tuning.

@@ -5,8 +5,8 @@
 // frame. ROS-free (unitree_sdk2 / CycloneDDS). Click a goal in rviz -> the planner replans.
 
 #include "common/data_buffer.hpp"
+#include "goal_generation/goal.hpp"   // the unified kist::Goal (x/y/yaw/dock/valid/name)
 
-#include <cstdint>
 #include <memory>
 #include <string>
 
@@ -19,11 +19,10 @@ class PoseStamped_;
 
 namespace kist {
 
-struct Goal {
-    int64_t stamp_ns = 0;
-    float   x = 0.f, y = 0.f;   // odom
-    float   yaw = 0.f;          // desired finish heading (rad)
-};
+// GoalReceiver produces the same kist::Goal as the mission layer, but for ad-hoc rviz clicks:
+// a raw point with dock OFF (has_yaw=true from the clicked orientation, but dock.align=false,
+// so the follower just drives there and stops). Named destinations (with dock) come from the
+// mission layer's GoalCommandReceiver instead.
 
 class GoalReceiver {
 public:

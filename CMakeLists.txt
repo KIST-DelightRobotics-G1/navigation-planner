@@ -141,18 +141,28 @@ add_library(obstacle_grid_publisher STATIC src/mapping/obstacle_grid_publisher.c
 target_include_directories(obstacle_grid_publisher PUBLIC include)
 target_link_libraries(obstacle_grid_publisher PUBLIC route_planner unitree_sdk2)
 
-# goal_receiver — rviz "2D Goal Pose" subscriber (rt/goal_pose).
+# goal_receiver — rviz "2D Goal Pose" subscriber (rt/goal_pose), ad-hoc goals (dock off).
+# Named goals (rt/kist/nav/goal, with dock) come from goal_generation. Its header pulls in the
+# unified kist::Goal from goal_generation/goal.hpp (header-only), so no extra link is needed.
 add_library(goal_receiver STATIC src/planning/goal_receiver.cpp)
 target_include_directories(goal_receiver PUBLIC include)
 target_link_libraries(goal_receiver PUBLIC unitree_sdk2)
+
+# controller/ — pure-pursuit path follower (Path + pose -> NavCommand) + reactive-stop
+# safety, and the Twist publisher (NavCommand -> rt/kist/nav/cmd_vel -> gearsonic).
+add_library(controller STATIC
+    src/controller/path_follower.cpp
+    src/controller/nav_command_publisher.cpp)
+target_include_directories(controller PUBLIC include)
+target_link_libraries(controller PUBLIC route_planner unitree_sdk2)   # Costmap + DDS Twist
 
 # system/ — the deployment facade: owns the readers/producer + RoutePlanner + publisher, and
 # runs the perception / planner / viz threads. The kist-navigation-planner binary runs this.
 add_library(nav_system STATIC src/system/nav_system.cpp)
 target_include_directories(nav_system PUBLIC include)
 target_link_libraries(nav_system PUBLIC
-    route_planner goal_receiver obstacle_grid_publisher lio_receiver lio_transform_producer
-    unitree_state_reader yaml-cpp)
+    route_planner controller goal_receiver goal_generation obstacle_grid_publisher
+    lio_receiver lio_transform_producer unitree_state_reader yaml-cpp)
 
 add_executable(kist-navigation-planner src/main.cpp)
 target_link_libraries(kist-navigation-planner PRIVATE nav_system)

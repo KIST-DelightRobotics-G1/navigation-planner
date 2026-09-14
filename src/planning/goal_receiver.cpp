@@ -34,11 +34,14 @@ void GoalReceiver::on_goal(const void* message) {
     const auto& q = msg.pose().orientation();
 
     Goal g;
-    g.stamp_ns = int64_t(msg.header().stamp().sec()) * 1000000000LL + msg.header().stamp().nanosec();
     g.x = float(p.x());
     g.y = float(p.y());
     g.yaw = float(std::atan2(2.0 * (q.w()*q.z() + q.x()*q.y()),
                              1.0 - 2.0 * (q.y()*q.y() + q.z()*q.z())));
+    g.has_yaw = true;         // rviz supplies an orientation ...
+    g.valid   = true;
+    g.name    = "";           // ad-hoc, not a catalog destination
+    // ... but dock stays default (align/approach OFF) -> just drive there and stop.
     goal_buf.SetData(g);
     std::cout << "[GoalReceiver] goal (" << g.x << ", " << g.y << ") yaw "
               << g.yaw * 57.2958f << " deg\n";

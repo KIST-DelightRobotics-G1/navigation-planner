@@ -13,6 +13,10 @@
 // controller (path -> velocity) is added later, behind its own safety.
 
 #include "common/data_buffer.hpp"
+#include "controller/path_follower.hpp"
+#include "controller/nav_command_publisher.hpp"
+#include "goal_generation/destination_publisher.hpp"
+#include "goal_generation/goal_command_receiver.hpp"
 #include "lio/lio_receiver.hpp"
 #include "lio/lio_transform_producer.hpp"
 #include "mapping/obstacle_grid_publisher.hpp"
@@ -20,6 +24,7 @@
 #include "route_planner/route_planner.hpp"
 
 #include <atomic>
+#include <optional>
 #include <string>
 #include <thread>
 
@@ -42,23 +47,34 @@ public:
 private:
     void perception_run();
     void planner_run();
+    void controller_run();
     void viz_run();
 
+    // Freshest goal from either channel: rviz ad-hoc (gr_) or named command (goalcmd_).
+    std::optional<Goal> active_goal();
+
     RoutePlanner          route_;
+    PathFollower          follower_;
     LioTransformProducer  prod_;
     LioReceiver           rx_;
-    GoalReceiver          gr_;
+    GoalReceiver          gr_;         // rviz "2D Goal Pose" (rt/goal_pose) — ad-hoc, no dock
+    DestinationPublisher  destpub_;    // advertises the catalog (rt/kist/nav/destinations)
+    GoalCommandReceiver   goalcmd_;    // named goals from a peer/LLM (rt/kist/nav/goal)
     ObstacleGridPublisher pub_;
+    NavCommandPublisher   cmd_pub_;
+    bool                  drive_enabled_ = false;   // NAV_DRIVE=1 arms Twist output
 
     DataBuffer<ObstacleGrid> grid_buf_;
     DataBuffer<Costmap>      costmap_buf_;
     DataBuffer<Path>         path_buf_;
+    DataBuffer<NavCommand>   cmd_buf_;      // follower output (NOT sent to the robot in this build)
 
-    std::thread       perc_thread_, plan_thread_, viz_thread_;
+    std::thread       perc_thread_, plan_thread_, ctrl_thread_, viz_thread_;
     std::atomic<bool> running_{false};
     std::atomic<bool> quit_{false};
 
-    bool sr_started_{false}, rx_started_{false}, gr_started_{false}, pub_started_{false};
+    bool sr_started_{false}, rx_started_{false}, gr_started_{false},
+         destpub_started_{false}, goalcmd_started_{false}, pub_started_{false};
 };
 
 } // namespace kist
