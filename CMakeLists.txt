@@ -6,6 +6,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(yaml-cpp REQUIRED)
 find_package(Eigen3 REQUIRED)       # header-only; linear algebra
+find_package(PCL REQUIRED COMPONENTS common io filters registration)  # localization: prior-map GICP
+link_directories(${PCL_LIBRARY_DIRS})
+add_definitions(${PCL_DEFINITIONS})
 # CUDAToolkit / OpenCV dropped — only the parked CV/occupancy stack needed them.
 
 # ─── thirdparty: unitree_sdk2 ─────────────────────────────────────────────────
@@ -203,6 +206,22 @@ add_executable(test_obstacle_grid test/test_obstacle_grid.cpp)
 target_link_libraries(test_obstacle_grid PRIVATE
     route_planner obstacle_grid_publisher goal_receiver lio_transform_producer lio_receiver
     unitree_state_reader yaml-cpp)
+
+# map_recorder — accumulate registered scans (rt/cloud_registered_1) into a voxel grid and
+# save a prior PCD map on Ctrl+C (our branch's FAST-LIO pcd_save is dead). ROS-free.
+add_executable(map_recorder test/tool_map_recorder.cpp)
+target_link_libraries(map_recorder PRIVATE lio_receiver unitree_sdk2 yaml-cpp)
+
+# localization/ — relocalizer: register a bounded local submap (from rt/cloud_registered_1,
+# odom) against the prior PCD map (map) via PCL GICP -> map->odom. PCL is hidden behind a PIMPL.
+add_library(localization STATIC src/localization/relocalizer.cpp)
+target_include_directories(localization PUBLIC include ${PCL_INCLUDE_DIRS})
+target_link_libraries(localization PUBLIC Eigen3::Eigen ${PCL_LIBRARIES})
+
+# reloc_check — v0 validation: GICP a live submap onto the prior map from a manual seed;
+# prints fitness + T_map_odom and dumps reloc_overlay.pcd for a pcl_viewer overlap check.
+add_executable(reloc_check test/tool_reloc_check.cpp)
+target_link_libraries(reloc_check PRIVATE localization lio_receiver unitree_sdk2 yaml-cpp)
 
 # ─── LIO engine: external DDS service (not built here) ────────────────────────
 # LIO now runs as a separate ROS2 process (deepglint FAST_LIO_LOCALIZATION_HUMANOID,

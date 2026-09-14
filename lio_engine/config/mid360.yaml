@@ -42,5 +42,5 @@
       scan_bodyframe_pub_en: true
 
     pcd_save:
-      pcd_save_en: false               # dead in this branch anyway
-      interval: -1
+      pcd_save_en: true                # test: does this branch actually write a PCD? (was "dead")
+      interval: -1                     # -1 = accumulate the whole run into one file
