@@ -6,8 +6,8 @@
 // + arcs) is RouteSmoother's job. start/goal are in the odom/map (costmap) frame; the
 // clearance field is passed in (computed once, shared with the smoother). Stateless.
 
-#include "route_planner/astar_planner/path.hpp"
-#include "route_planner/costmap_builder/costmap.hpp"
+#include "route_planner/planner/astar_planner/path.hpp"
+#include "route_planner/perception/costmap_builder/costmap.hpp"
 
 #include <cstdint>
 #include <utility>

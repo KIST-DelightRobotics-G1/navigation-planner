@@ -1,6 +1,6 @@
-#include "route_planner/costmap_builder/costmap_builder.hpp"
+#include "route_planner/perception/costmap_builder/costmap_builder.hpp"
 
-#include "route_planner/costmap_builder/edt.hpp"
+#include "route_planner/perception/costmap_builder/edt.hpp"
 
 #include <algorithm>
 #include <cmath>

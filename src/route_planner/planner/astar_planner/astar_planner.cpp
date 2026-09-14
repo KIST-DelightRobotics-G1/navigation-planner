@@ -1,4 +1,4 @@
-#include "route_planner/astar_planner/astar_planner.hpp"
+#include "route_planner/planner/astar_planner/astar_planner.hpp"
 
 #include <algorithm>
 #include <cmath>

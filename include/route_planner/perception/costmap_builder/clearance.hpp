@@ -9,7 +9,7 @@
 //   medial_axis:     the ridge cells (local maxima of the clearance field) = the centreline
 //                    skeleton the smoother pulls toward. Corners are simply where it bends.
 
-#include "route_planner/costmap_builder/costmap.hpp"
+#include "route_planner/perception/costmap_builder/costmap.hpp"
 
 #include <cstdint>
 #include <utility>

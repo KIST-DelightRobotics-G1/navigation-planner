@@ -12,7 +12,7 @@
 // z into a height. The xy lattice is odom-anchored like the 2D grid.
 
 #include "lio/lio_cloud.hpp"          // LioCloud — registered scan (odom frame)
-#include "route_planner/obstacle_grid_builder/obstacle_grid.hpp"  // ObstacleGridConfig, ObstacleGrid (projection out)
+#include "route_planner/perception/obstacle_grid_builder/obstacle_grid.hpp"  // ObstacleGridConfig, ObstacleGrid (projection out)
 
 #include <cmath>
 #include <cstdint>

@@ -2,7 +2,7 @@
 
 #include "common/config.hpp"
 #include "common/dds_config.hpp"
-#include "route_planner/costmap_builder/clearance.hpp"
+#include "route_planner/perception/costmap_builder/clearance.hpp"
 #include "unitree/unitree_state_reader.hpp"
 
 #include <chrono>
@@ -23,7 +23,7 @@ bool NavSystem::start(const std::string& config_path) {
     const int domain = root["unitree"]["domain_id"].as<int>(0);
     if (!apply_dds_config(root)) return false;
 
-    // route_.gcfg/ccfg/acfg/scfg keep their calibrated defaults (real-G1 tuned).
+    // mapper_ (gcfg/ccfg) + planner_ (acfg/scfg) keep their calibrated defaults (real-G1 tuned).
 
     auto& sr = UnitreeStateReader::instance();
     if (!sr.start(domain, "")) { std::cerr << "[NavSystem] lowstate reader failed\n"; return false; }
@@ -52,9 +52,9 @@ bool NavSystem::start(const std::string& config_path) {
     // Env tuning for the follower (sweep without rebuilding). Terminal dock behavior
     // (align/approach/standoff) is per-destination now (config), not env.
     {
-        FollowConfig fc = follower_.config();
+        FollowConfig fc = controller_.config();
         if (const char* v = std::getenv("NAV_VMAX")) fc.v_max = std::atof(v);
-        follower_.set_config(fc);
+        controller_.set_config(fc);
     }
     // Driving is opt-in: only NAV_DRIVE=1 arms the Twist output. Default = preview (no motion).
     drive_enabled_ = [] { const char* v = std::getenv("NAV_DRIVE"); return v && v[0] == '1'; }();
@@ -76,47 +76,25 @@ bool NavSystem::start(const std::string& config_path) {
     return true;
 }
 
-namespace { double quat_yaw2(const Eigen::Quaterniond& q) {
-    return std::atan2(2*(q.w()*q.z() + q.x()*q.y()), 1 - 2*(q.y()*q.y() + q.z()*q.z())); } }
-
-// Control loop (~20 Hz). Computes the follow command with a fast reactive-stop safety check,
-// then EITHER publishes it as a Twist (NAV_DRIVE=1 -> robot moves) OR just previews it. Stops
-// (zeros) on stale data, blocked path, no goal, or arrival.
+// Control loop (~20 Hz): gather the freshest inputs from the buffers, hand them to the
+// LocalController (which owns the control logic), then EITHER publish the command as a Twist
+// (NAV_DRIVE=1 -> robot moves) OR just preview it. Stale inputs (>500 ms) are nulled so the
+// controller stops safely; the control decision itself lives in LocalController::step.
 void NavSystem::controller_run() {
     auto last_print = std::chrono::steady_clock::now();
     while (running_) {
         const auto t0 = std::chrono::steady_clock::now();
 
-        NavCommand  cmd;                                    // zeros = stop (default/safe)
+        auto pathT = path_buf_.GetDataWithTime();
+        auto rtT   = prod_.out_buf.GetDataWithTime();
+        auto cm    = costmap_buf_.GetData();
+        auto goal  = active_goal();
+        const Path*            path = (pathT.HasData() && pathT.GetAgeMs() < 500.0) ? pathT.data.get() : nullptr;
+        const RobotTransforms* rt   = (rtT.HasData()  && rtT.GetAgeMs()  < 500.0) ? rtT.data.get()  : nullptr;
+
         FollowPhase phase = FollowPhase::Arrived;
-        auto path = path_buf_.GetDataWithTime();
-        auto rtT  = prod_.out_buf.GetDataWithTime();        // freshest robot pose
-        auto cm   = costmap_buf_.GetData();
-        const bool fresh = path.HasData() && path.GetAgeMs() < 500.0 &&
-                           rtT.HasData()  && rtT.GetAgeMs()  < 500.0;
-        if (fresh && cm && !cm->empty() && !path.data->empty()) {
-            const auto& rt = *rtT.data;
-            Pose2D pose{ float(rt.T_odom_pelvis.translation.x()),
-                         float(rt.T_odom_pelvis.translation.y()),
-                         float(quat_yaw2(rt.T_odom_pelvis.rotation)) };
-            float      goal_yaw = std::numeric_limits<float>::quiet_NaN();
-            DockConfig dock;                                // default = off (ad-hoc / no goal)
-            if (auto g = active_goal(); g && g->valid) {
-                dock = g->dock;
-                if (g->has_yaw) goal_yaw = g->yaw;          // NaN otherwise -> align skipped
-            }
-            cmd = follower_.compute(*path.data, pose, dock, cm.get(), goal_yaw, &phase);
-            // Reactive sudden-obstacle stop applies ONLY while actively following the path.
-            // The terminal approach deliberately creeps toward the goal object (held off by its
-            // own front_distance standoff), so path_ahead_blocked — which sees that same object
-            // on the path ahead — must not veto it, or the robot stops before reaching standoff.
-            if (phase == FollowPhase::Driving &&
-                path_ahead_blocked(*cm, *path.data, pose, follower_.config().react_ahead_m,
-                                   uint8_t(route_.acfg.obs_cost))) {
-                cmd = NavCommand{};                         // sudden obstacle -> stop
-                phase = FollowPhase::Blocked;
-            }
-        }
+        NavCommand  cmd   = controller_.step(path, rt, cm.get(), goal ? &*goal : nullptr, &phase);
+
         cmd_buf_.SetData(cmd);
         if (drive_enabled_) cmd_pub_.publish(cmd);          // Twist -> gearsonic (robot moves)
 
@@ -144,9 +122,9 @@ void NavSystem::perception_run() {
         last_stamp = scan->stamp_ns;
         auto rt = prod_.nearest(scan->stamp_ns);
         if (!rt) continue;                            // no pose for this scan
-        route_.update_map(*scan, *rt);
-        grid_buf_.SetData(route_.grid());
-        costmap_buf_.SetData(route_.costmap());
+        mapper_.update_map(*scan, *rt);
+        grid_buf_.SetData(mapper_.grid());
+        costmap_buf_.SetData(mapper_.costmap());
     }
 }
 
@@ -167,7 +145,7 @@ void NavSystem::planner_run() {
         auto goal = active_goal();
         auto cm   = costmap_buf_.GetData();
         if (goal && goal->valid && cm && !cm->empty())
-            path_buf_.SetData(route_.plan(*cm, {cm->robot_x, cm->robot_y}, {goal->x, goal->y}));
+            path_buf_.SetData(planner_.plan(*cm, {cm->robot_x, cm->robot_y}, {goal->x, goal->y}));
         else
             path_buf_.SetData(Path{});   // no / cancelled goal -> empty path -> controller stops
         std::this_thread::sleep_for(std::chrono::milliseconds(200));   // ~5 Hz replan
@@ -176,7 +154,7 @@ void NavSystem::planner_run() {
 
 void NavSystem::viz_run() {
     while (running_) {
-        if (auto grid = grid_buf_.GetData()) pub_.publish(*grid, route_.gcfg);
+        if (auto grid = grid_buf_.GetData()) pub_.publish(*grid, mapper_.gcfg);
         if (auto cm = costmap_buf_.GetData(); cm && !cm->empty()) {
             pub_.publish_costmap(*cm);
             const auto clr = clearance_field(*cm);
@@ -184,7 +162,7 @@ void NavSystem::viz_run() {
             pub_.publish_medial(medial_axis(*cm, clr));
         }
         if (auto path = path_buf_.GetData()) {
-            pub_.publish_path(path->waypoints, route_.gcfg.resolution_m);
+            pub_.publish_path(path->waypoints, mapper_.gcfg.resolution_m);
             pub_.publish_path_raw(path->raw_waypoints);
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(100));   // ~10 Hz to rviz

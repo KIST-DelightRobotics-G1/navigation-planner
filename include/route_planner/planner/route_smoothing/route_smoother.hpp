@@ -7,7 +7,7 @@
 // stage — the A* stage owns only the route (which corridors). (Curvature jumps straight->
 // arc; a clothoid pass is future.)
 
-#include "route_planner/costmap_builder/costmap.hpp"
+#include "route_planner/perception/costmap_builder/costmap.hpp"
 
 #include <array>
 #include <utility>

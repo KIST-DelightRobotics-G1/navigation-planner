@@ -13,7 +13,7 @@
 // controller (path -> velocity) is added later, behind its own safety.
 
 #include "common/data_buffer.hpp"
-#include "controller/path_follower.hpp"
+#include "controller/local_controller.hpp"
 #include "controller/nav_command_publisher.hpp"
 #include "goal_generation/destination_publisher.hpp"
 #include "goal_generation/goal_command_receiver.hpp"
@@ -21,7 +21,8 @@
 #include "lio/lio_transform_producer.hpp"
 #include "mapping/obstacle_grid_publisher.hpp"
 #include "planning/goal_receiver.hpp"
-#include "route_planner/route_planner.hpp"
+#include "route_planner/perception/obstacle_mapper.hpp"
+#include "route_planner/planner/route_planner.hpp"
 
 #include <atomic>
 #include <optional>
@@ -53,8 +54,9 @@ private:
     // Freshest goal from either channel: rviz ad-hoc (gr_) or named command (goalcmd_).
     std::optional<Goal> active_goal();
 
-    RoutePlanner          route_;
-    PathFollower          follower_;
+    ObstacleMapper        mapper_;     // perception: scan -> grid + costmap
+    RoutePlanner          planner_;    // planning: costmap + goal -> path
+    LocalController        controller_;
     LioTransformProducer  prod_;
     LioReceiver           rx_;
     GoalReceiver          gr_;         // rviz "2D Goal Pose" (rt/goal_pose) — ad-hoc, no dock

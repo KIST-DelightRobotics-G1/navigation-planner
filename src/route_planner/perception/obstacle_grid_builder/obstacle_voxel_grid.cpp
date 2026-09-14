@@ -1,4 +1,4 @@
-#include "route_planner/obstacle_grid_builder/obstacle_voxel_grid.hpp"
+#include "route_planner/perception/obstacle_grid_builder/obstacle_voxel_grid.hpp"
 
 #include <algorithm>
 #include <cmath>

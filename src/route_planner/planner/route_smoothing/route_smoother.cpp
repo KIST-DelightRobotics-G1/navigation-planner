@@ -1,4 +1,4 @@
-#include "route_planner/route_smoothing/route_smoother.hpp"
+#include "route_planner/planner/route_smoothing/route_smoother.hpp"
 
 #include <algorithm>
 #include <cmath>

@@ -128,13 +128,14 @@ target_link_libraries(lio_transform_producer PUBLIC transforms kinematics)
 #   route_planner.{hpp,cpp}: wires the four stages (update_map + plan). Pure computation, no
 #   threads / DDS (folder split is organization only). LiDAR-only for now (camera last).
 add_library(route_planner STATIC
-    src/route_planner/obstacle_grid_builder/obstacle_voxel_grid.cpp
-    src/route_planner/costmap_builder/costmap_builder.cpp
-    src/route_planner/costmap_builder/edt.cpp
-    src/route_planner/costmap_builder/clearance.cpp
-    src/route_planner/astar_planner/astar_planner.cpp
-    src/route_planner/route_smoothing/route_smoother.cpp
-    src/route_planner/route_planner.cpp)
+    src/route_planner/perception/obstacle_grid_builder/obstacle_voxel_grid.cpp
+    src/route_planner/perception/costmap_builder/costmap_builder.cpp
+    src/route_planner/perception/costmap_builder/edt.cpp
+    src/route_planner/perception/costmap_builder/clearance.cpp
+    src/route_planner/perception/obstacle_mapper.cpp
+    src/route_planner/planner/astar_planner/astar_planner.cpp
+    src/route_planner/planner/route_smoothing/route_smoother.cpp
+    src/route_planner/planner/route_planner.cpp)
 target_include_directories(route_planner PUBLIC include)
 target_link_libraries(route_planner PUBLIC Eigen3::Eigen)   # Transform (LioCloud is header-only)
 
@@ -155,6 +156,7 @@ target_link_libraries(goal_receiver PUBLIC unitree_sdk2)
 # safety, and the Twist publisher (NavCommand -> rt/kist/nav/cmd_vel -> gearsonic).
 add_library(controller STATIC
     src/controller/path_follower.cpp
+    src/controller/local_controller.cpp
     src/controller/nav_command_publisher.cpp)
 target_include_directories(controller PUBLIC include)
 target_link_libraries(controller PUBLIC route_planner unitree_sdk2)   # Costmap + DDS Twist

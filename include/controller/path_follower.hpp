@@ -8,8 +8,8 @@
 // behind the controller worker's safety gate.
 
 #include "controller/nav_command.hpp"
-#include "route_planner/astar_planner/path.hpp"
-#include "route_planner/costmap_builder/costmap.hpp"
+#include "route_planner/planner/astar_planner/path.hpp"
+#include "route_planner/perception/costmap_builder/costmap.hpp"
 
 #include <cmath>
 #include <cstdint>

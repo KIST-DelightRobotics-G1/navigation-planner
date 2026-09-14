@@ -1,6 +1,4 @@
-#include "route_planner/route_planner.hpp"
-
-#include "route_planner/costmap_builder/clearance.hpp"
+#include "route_planner/perception/obstacle_mapper.hpp"
 
 #include <cmath>
 
@@ -12,7 +10,7 @@ double quat_yaw(const Eigen::Quaterniond& q) {
 }
 }  // namespace
 
-void RoutePlanner::update_map(const LioCloud& scan, const RobotTransforms& tf) {
+void ObstacleMapper::update_map(const LioCloud& scan, const RobotTransforms& tf) {
     const Transform& T_odom_lidar  = tf.T_odom_lidar;    // ray origin (3D carve) + band top
     const Transform& T_odom_pelvis = tf.T_odom_pelvis;   // robot base: grid centre, floor, pose
     const float px = float(T_odom_pelvis.translation.x());
@@ -34,17 +32,6 @@ void RoutePlanner::update_map(const LioCloud& scan, const RobotTransforms& tf) {
     grid_.robot_yaw = float(quat_yaw(T_odom_pelvis.rotation));
 
     costmap_ = cb_.build(grid_, gcfg, ccfg);
-}
-
-Path RoutePlanner::plan(const Costmap& cm,
-                        std::pair<float, float> start, std::pair<float, float> goal) const {
-    if (cm.empty()) return Path{};
-
-    const std::vector<float> clr = clearance_field(cm);   // shared by A* cost + smoother
-    Path p = AStarPlanner(acfg).plan(cm, clr, start, goal);
-    if (!p.empty())
-        RouteSmoother(scfg).smooth(cm, clr, p.raw_waypoints, p.waypoints, p.turn_circles);
-    return p;
 }
 
 } // namespace kist
