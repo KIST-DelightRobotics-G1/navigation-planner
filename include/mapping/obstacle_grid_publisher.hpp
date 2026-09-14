@@ -7,8 +7,8 @@
 // registered cloud. Publish-only, for visualization/validation — the planner consumes
 // the ObstacleGrid struct directly, not this wire form.
 
-#include "mapping/obstacle_grid.hpp"
-#include "mapping/costmap.hpp"
+#include "route_planner/obstacle_grid_builder/obstacle_grid.hpp"
+#include "route_planner/costmap_builder/costmap.hpp"
 
 #include <memory>
 #include <string>

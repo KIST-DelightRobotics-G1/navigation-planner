@@ -5,8 +5,8 @@
 // consumer (the perception worker) calls build() per grid. No OpenCV, no semantic/dynamic
 // layer — LiDAR-only for now.
 
-#include "mapping/costmap.hpp"
-#include "mapping/obstacle_grid.hpp"   // ObstacleGrid, ObstacleGridConfig (occ_threshold)
+#include "route_planner/costmap_builder/costmap.hpp"
+#include "route_planner/obstacle_grid_builder/obstacle_grid.hpp"   // ObstacleGrid, ObstacleGridConfig (occ_threshold)
 
 namespace kist {
 

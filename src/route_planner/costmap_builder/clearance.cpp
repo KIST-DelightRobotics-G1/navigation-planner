@@ -1,6 +1,6 @@
-#include "mapping/clearance.hpp"
+#include "route_planner/costmap_builder/clearance.hpp"
 
-#include "mapping/edt.hpp"
+#include "route_planner/costmap_builder/edt.hpp"
 
 #include <cmath>
 

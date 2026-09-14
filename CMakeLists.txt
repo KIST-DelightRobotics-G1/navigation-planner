@@ -117,31 +117,45 @@ add_library(lio_transform_producer STATIC src/lio/lio_transform_producer.cpp)
 target_include_directories(lio_transform_producer PUBLIC include)
 target_link_libraries(lio_transform_producer PUBLIC transforms kinematics)
 
-# mapping/ — the local obstacle layer: registered LIO scan (odom) -> 3D log-odds voxel
-# grid (3D ray-carve + floor-band) -> column-max projection to the 2D ObstacleGrid the
-# planner/costmap consume. Pure math + data; no threads (the builder, next stage, adds the
-# rolling window + worker). LiDAR-only for now (camera last).
-add_library(mapping STATIC
-    src/mapping/obstacle_voxel_grid.cpp
-    src/mapping/edt.cpp
-    src/mapping/costmap_builder.cpp
-    src/mapping/clearance.cpp)
-target_include_directories(mapping PUBLIC include)   # LioCloud is a pure header — no link needed
+# route_planner/ — the route-planning pipeline, one folder per stage + the orchestrator:
+#   obstacle_grid_builder : registered LIO scan (odom) -> 3D log-odds voxel grid + rolling
+#   costmap_builder       : occupancy -> EDT inflation costmap (+ clearance / medial axis)
+#   astar_planner         : clearance-centred A* route (raw grid path)
+#   route_smoothing       : LOS straighten + max-radius circular-arc corners (the shape)
+#   route_planner.{hpp,cpp}: wires the four stages (update_map + plan). Pure computation, no
+#   threads / DDS (folder split is organization only). LiDAR-only for now (camera last).
+add_library(route_planner STATIC
+    src/route_planner/obstacle_grid_builder/obstacle_voxel_grid.cpp
+    src/route_planner/costmap_builder/costmap_builder.cpp
+    src/route_planner/costmap_builder/edt.cpp
+    src/route_planner/costmap_builder/clearance.cpp
+    src/route_planner/astar_planner/astar_planner.cpp
+    src/route_planner/route_smoothing/route_smoother.cpp
+    src/route_planner/route_planner.cpp)
+target_include_directories(route_planner PUBLIC include)
+target_link_libraries(route_planner PUBLIC Eigen3::Eigen)   # Transform (LioCloud is header-only)
 
-# obstacle_grid_publisher — bridge the ObstacleGrid to rviz2 over DDS (nav_msgs/
-# OccupancyGrid + geometry_msgs/PoseStamped + PointCloud2 costmap/path). Visualization
-# only; the planner reads the struct directly. Kept separate so the grid math stays link-free.
+# obstacle_grid_publisher — bridge the grid/costmap/path to rviz2 over DDS (OccupancyGrid /
+# PoseStamped / PointCloud2). Visualization only; the planner reads the structs directly.
 add_library(obstacle_grid_publisher STATIC src/mapping/obstacle_grid_publisher.cpp)
 target_include_directories(obstacle_grid_publisher PUBLIC include)
-target_link_libraries(obstacle_grid_publisher PUBLIC mapping unitree_sdk2)
+target_link_libraries(obstacle_grid_publisher PUBLIC route_planner unitree_sdk2)
 
-# planning/ — global path search: 8-connected A* over the costmap + LOS/Chaikin smoothing
-# (astar_planner), and the rviz goal subscriber (goal_receiver, rt/goal_pose).
-add_library(planning STATIC
-    src/planning/astar_planner.cpp
-    src/planning/goal_receiver.cpp)
-target_include_directories(planning PUBLIC include)
-target_link_libraries(planning PUBLIC mapping unitree_sdk2)
+# goal_receiver — rviz "2D Goal Pose" subscriber (rt/goal_pose).
+add_library(goal_receiver STATIC src/planning/goal_receiver.cpp)
+target_include_directories(goal_receiver PUBLIC include)
+target_link_libraries(goal_receiver PUBLIC unitree_sdk2)
+
+# system/ — the deployment facade: owns the readers/producer + RoutePlanner + publisher, and
+# runs the perception / planner / viz threads. The kist-navigation-planner binary runs this.
+add_library(nav_system STATIC src/system/nav_system.cpp)
+target_include_directories(nav_system PUBLIC include)
+target_link_libraries(nav_system PUBLIC
+    route_planner goal_receiver obstacle_grid_publisher lio_receiver lio_transform_producer
+    unitree_state_reader yaml-cpp)
+
+add_executable(kist-navigation-planner src/main.cpp)
+target_link_libraries(kist-navigation-planner PRIVATE nav_system)
 
 # kinematics/ (waist+foot FK) + state_estimation/ (InEKF) are PARKED under _parked/:
 # the LIO engine provides T_odom_lidar over DDS, so waist FK / InEKF aren't needed.
@@ -177,7 +191,7 @@ target_link_libraries(test_lio_transforms PRIVATE
 # the terminal. Validate standing.
 add_executable(test_obstacle_grid test/test_obstacle_grid.cpp)
 target_link_libraries(test_obstacle_grid PRIVATE
-    mapping obstacle_grid_publisher planning lio_transform_producer lio_receiver
+    route_planner obstacle_grid_publisher goal_receiver lio_transform_producer lio_receiver
     unitree_state_reader yaml-cpp)
 
 # ─── LIO engine: external DDS service (not built here) ────────────────────────
