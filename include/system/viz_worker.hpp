@@ -5,6 +5,8 @@
 #pragma once
 
 #include "common/data_buffer.hpp"
+#include "lio/lio_receiver.hpp"
+#include "lio/lio_transform_producer.hpp"
 #include "mapping/obstacle_grid_publisher.hpp"
 #include "route_planner/perception/costmap_builder/costmap.hpp"
 #include "route_planner/perception/obstacle_grid_builder/obstacle_grid.hpp"
@@ -20,7 +22,8 @@ public:
     ~VizWorker() { stop(); }
 
     void start(DataBuffer<ObstacleGrid>& grid_buf, DataBuffer<Costmap>& costmap_buf,
-               DataBuffer<Path>& path_buf, ObstacleGridPublisher& pub, ObstacleGridConfig gcfg);
+               DataBuffer<Path>& path_buf, ObstacleGridPublisher& pub, ObstacleGridConfig gcfg,
+               LioTransformProducer& prod, LioReceiver& rx);
     void stop();
 
 private:
@@ -31,6 +34,8 @@ private:
     DataBuffer<Costmap>*      costmap_buf_ = nullptr;
     DataBuffer<Path>*         path_buf_    = nullptr;
     ObstacleGridPublisher*    pub_         = nullptr;
+    LioTransformProducer*     prod_        = nullptr;   // lidar/pelvis pose + sway
+    LioReceiver*              rx_          = nullptr;   // registered scan (for the sway cloud)
 
     std::thread       thread_;
     std::atomic<bool> running_{false};

@@ -43,6 +43,29 @@ void make_cloud(sensor_msgs::msg::dds_::PointCloud2_& pc,
         std::memcpy(&blob[i * 12], xyz, 12);
     }
 }
+
+// Same, from a flat xyz vector (x0,y0,z0,x1,...) already in the target frame.
+void make_cloud3d(sensor_msgs::msg::dds_::PointCloud2_& pc,
+                  const std::vector<float>& xyz, const std::string& frame) {
+    const std::size_t n = xyz.size() / 3;
+    pc.header().frame_id() = frame;
+    set_stamp(pc.header().stamp(), 0);
+    pc.height(1);
+    pc.width(uint32_t(n));
+    pc.is_bigendian(false);
+    pc.is_dense(false);
+    pc.point_step(12);
+    pc.row_step(uint32_t(12 * n));
+    const char* names[3] = {"x", "y", "z"};
+    for (int k = 0; k < 3; ++k) {
+        sensor_msgs::msg::dds_::PointField_ f;
+        f.name(names[k]); f.offset(uint32_t(4 * k)); f.datatype(7); f.count(1);
+        pc.fields().push_back(f);
+    }
+    auto& blob = pc.data();
+    blob.resize(n * 12);
+    if (n) std::memcpy(blob.data(), xyz.data(), n * 12);
+}
 }  // namespace
 
 ObstacleGridPublisher::ObstacleGridPublisher() = default;   // ChannelPublisher complete here
@@ -52,7 +75,9 @@ bool ObstacleGridPublisher::start(int domain_id, const std::string& network_inte
                                   const std::string& grid_topic, const std::string& pose_topic,
                                   const std::string& costmap_topic, const std::string& path_topic,
                                   const std::string& raw_path_topic, const std::string& clearance_topic,
-                                  const std::string& medial_topic, const std::string& frame_id) {
+                                  const std::string& medial_topic, const std::string& lidar_pose_topic,
+                                  const std::string& pelvis_pose_topic, const std::string& sway_cloud_topic,
+                                  const std::string& frame_id) {
     frame_ = frame_id;
     try {
         unitree::robot::ChannelFactory::Instance()->Init(domain_id, network_interface);  // no-op if inited
@@ -70,6 +95,12 @@ bool ObstacleGridPublisher::start(int domain_id, const std::string& network_inte
         clearance_pub_->InitChannel();
         medial_pub_.reset(new PathPub(medial_topic));
         medial_pub_->InitChannel();
+        lidar_pose_pub_.reset(new PosePub(lidar_pose_topic));
+        lidar_pose_pub_->InitChannel();
+        pelvis_pose_pub_.reset(new PosePub(pelvis_pose_topic));
+        pelvis_pose_pub_->InitChannel();
+        sway_cloud_pub_.reset(new PathPub(sway_cloud_topic));
+        sway_cloud_pub_->InitChannel();
     } catch (const std::exception& e) {
         std::cerr << "[ObstacleGridPublisher] DDS init failed: " << e.what() << "\n";
         return false;
@@ -128,6 +159,32 @@ void ObstacleGridPublisher::publish(const ObstacleGrid& g, const ObstacleGridCon
     ps.pose().orientation().y(0.0);
     ps.pose().orientation().z(std::sin(g.robot_yaw * 0.5f));
     pose_pub_->Write(ps);
+}
+
+void ObstacleGridPublisher::publish_frames(const RobotTransforms& tf) {
+    auto put = [&](std::unique_ptr<PosePub>& pub, const Transform& T) {
+        if (!pub) return;
+        geometry_msgs::msg::dds_::PoseStamped_ ps;
+        ps.header().frame_id() = frame_;
+        set_stamp(ps.header().stamp(), 0);
+        ps.pose().position().x(T.translation.x());
+        ps.pose().position().y(T.translation.y());
+        ps.pose().position().z(T.translation.z());
+        ps.pose().orientation().w(T.rotation.w());
+        ps.pose().orientation().x(T.rotation.x());
+        ps.pose().orientation().y(T.rotation.y());
+        ps.pose().orientation().z(T.rotation.z());
+        pub->Write(ps);
+    };
+    put(lidar_pose_pub_,  tf.T_odom_lidar);    // raw — sways with the gait
+    put(pelvis_pose_pub_, tf.T_odom_pelvis);   // waist-FK stabilized
+}
+
+void ObstacleGridPublisher::publish_cloud(const std::vector<float>& xyz) {
+    if (!sway_cloud_pub_ || xyz.empty()) return;
+    sensor_msgs::msg::dds_::PointCloud2_ pc;
+    make_cloud3d(pc, xyz, frame_);
+    sway_cloud_pub_->Write(pc);
 }
 
 void ObstacleGridPublisher::publish_costmap(const Costmap& cm) {
