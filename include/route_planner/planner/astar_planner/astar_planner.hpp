@@ -26,7 +26,8 @@ struct AStarConfig {
     float goal_ignore_radius_m = 0.30f;
 
     // Centre preference: penalise cells with clearance below ref_clr_m; 0 beyond (barrier).
-    float w_center   = 15.0f;         // weight of the clearance penalty (0 = pure shortest path)
+    float w_center   = 30.0f;         // weight of the clearance penalty (0 = pure shortest path);
+                                      // higher centres the path in tight passages (fewer BLOCKED trips)
     float ref_clr_m  = 1.00f;         // clearance (m) at/above which a cell is "central enough"
 };
 
