@@ -65,7 +65,7 @@ bool NavSystem::start(const std::string& config_path) {
     // when available, else the config fixed seed.
     {
         const auto  lc = root["localization"];
-        const std::string prior_map = lc["prior_map"].as<std::string>("maps/prior_map.pcd");
+        const std::string prior_map = lc["prior_map"].as<std::string>("maps/map.pcd");
         const float seed_yaw    = lc["seed"]["yaw_deg"].as<float>(0.f) * float(M_PI) / 180.f;
         const float map_uwb_yaw = lc["map_uwb_yaw_deg"].as<float>(0.f) * float(M_PI) / 180.f;
 
@@ -87,7 +87,8 @@ bool NavSystem::start(const std::string& config_path) {
                 std::cout << "[NavSystem] localization seed = config fixed (UWB seed unavailable)\n";
         }
 
-        // Relocalizer accept gates (config-tunable without rebuild).
+        // Relocalizer accept gates (config-tunable without rebuild). Resolution (map/submap voxel)
+        // is a fixed header default — edit RelocConfig in include/localization/relocalizer.hpp.
         RelocConfig rcfg;
         rcfg.fitness_max = lc["fitness_max"].as<double>(rcfg.fitness_max);
         rcfg.max_jump_m  = lc["max_jump_m"].as<double>(rcfg.max_jump_m);
