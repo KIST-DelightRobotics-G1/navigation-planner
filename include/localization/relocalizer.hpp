@@ -19,6 +19,7 @@
 #include <cstddef>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace kist {
 
@@ -30,6 +31,10 @@ struct RelocConfig {
     int    gicp_max_iter   = 50;     // GICP max iterations
     double fitness_max      = 0.30;  // accept only if GICP fitness (mean sq err, m^2) <= this
     double max_jump_m       = 1.0;   // reject a correction translating T_map_odom more than this
+    double max_yaw_deg      = 30.0;  // reject a solution whose heading deviates from the SEED yaw
+                                     // by more than this (kills 180deg flips in symmetric scenes;
+                                     // relies on a roughly-correct seed yaw, i.e. a fixed boot
+                                     // heading). 0 = disabled.
 };
 
 class Relocalizer {
@@ -46,6 +51,10 @@ public:
     void        add_scan(const LioCloud& scan);      // accumulate into the rolling submap (odom)
     std::size_t submap_size() const;                 // downsampled submap point count
     std::size_t prior_size()  const;                 // downsampled prior-map point count
+
+    // Downsampled prior map as flat xyz (map frame) — for the rviz overlay (drawn in odom by
+    // transforming with T_odom_map, so it sits on the live obstacle grid when localised).
+    std::vector<float> prior_xyz() const;
 
     void seed(const Eigen::Matrix4f& T_map_odom);    // initial guess (map<-odom)
     bool has_estimate() const { return seeded_; }
@@ -67,6 +76,7 @@ private:
     RelocConfig     cfg_;
     Eigen::Matrix4f T_map_odom_ = Eigen::Matrix4f::Identity();
     bool            seeded_ = false;
+    float           seed_yaw_ = 0.f;   // heading of the seed — the yaw gate's reference
 };
 
 }  // namespace kist

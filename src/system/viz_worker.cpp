@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
+#include <utility>
 #include <vector>
 
 namespace kist {
@@ -20,9 +21,11 @@ double yaw_of(const Eigen::Quaterniond& q) {
 
 void VizWorker::start(DataBuffer<ObstacleGrid>& grid_buf, DataBuffer<Costmap>& costmap_buf,
                       DataBuffer<Path>& path_buf, ObstacleGridPublisher& pub, ObstacleGridConfig gcfg,
-                      LioTransformProducer& prod, LioReceiver& rx, DataBuffer<MapOdom>& mapodom) {
+                      LioTransformProducer& prod, LioReceiver& rx, DataBuffer<MapOdom>& mapodom,
+                      std::vector<float> prior_map_xyz) {
     grid_buf_ = &grid_buf; costmap_buf_ = &costmap_buf; path_buf_ = &path_buf; pub_ = &pub;
     gcfg_ = gcfg; prod_ = &prod; rx_ = &rx; mapodom_ = &mapodom;
+    prior_map_xyz_ = std::move(prior_map_xyz);
     survey_ = [] { const char* v = std::getenv("NAV_SURVEY"); return v && v[0] == '1'; }();
     running_ = true;
     thread_ = std::thread(&VizWorker::run, this);
@@ -35,6 +38,7 @@ void VizWorker::stop() {
 
 void VizWorker::run() {
     auto last_survey = std::chrono::steady_clock::now();
+    auto last_prior  = std::chrono::steady_clock::now();
     while (running_) {
         if (auto grid = grid_buf_->GetData()) pub_->publish(*grid, gcfg_);
         if (auto cm = costmap_buf_->GetData(); cm && !cm->empty()) {
@@ -86,6 +90,26 @@ void VizWorker::run() {
                                 mx, my, ym * 57.2958);
                 } else {
                     std::printf("[survey] waiting for map->odom lock...\n");
+                }
+            }
+        }
+        // Global-frame overlay (~2 Hz): the prior map drawn IN ODOM (transform by T_odom_map),
+        // so rt/prior_map sits on the live obstacle grid — see the map->odom alignment in rviz.
+        if (!prior_map_xyz_.empty()) {
+            const auto now = std::chrono::steady_clock::now();
+            if (now - last_prior >= std::chrono::milliseconds(500)) {
+                last_prior = now;
+                if (auto mo = mapodom_->GetData()) {
+                    const Eigen::Matrix4f T = mo->T_map_odom.inverse();   // T_odom_map
+                    const std::size_t n = prior_map_xyz_.size() / 3;
+                    std::vector<float> out(n * 3);
+                    for (std::size_t i = 0; i < n; ++i) {
+                        const Eigen::Vector4f p(prior_map_xyz_[3*i], prior_map_xyz_[3*i+1],
+                                                prior_map_xyz_[3*i+2], 1.f);
+                        const Eigen::Vector4f q = T * p;
+                        out[3*i] = q.x(); out[3*i+1] = q.y(); out[3*i+2] = q.z();
+                    }
+                    pub_->publish_prior(out);
                 }
             }
         }

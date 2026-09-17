@@ -34,9 +34,9 @@ destinations:
     # home: no dock (just park at the point).
 
   - name: fridge
-    x: 1.10               # surveyed in the map frame (NAV_SURVEY, robot parked in front)
-    y: 2.20
-    yaw_deg: 87           # arrival heading (robot faced the fridge)
+    x: 0.38               # surveyed in the map frame (NAV_SURVEY, robot parked in front)
+    y: -2.84
+    yaw_deg: -85          # arrival heading (robot faced the fridge)
     align: true           # turn to face the fridge
     approach: true        # then creep up to it
     standoff_m: 0.18      # stop 0.18 m from the (inflated) fridge — tuned on the real G1

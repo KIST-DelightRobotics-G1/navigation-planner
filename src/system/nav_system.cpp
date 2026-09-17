@@ -87,7 +87,13 @@ bool NavSystem::start(const std::string& config_path) {
                 std::cout << "[NavSystem] localization seed = config fixed (UWB seed unavailable)\n";
         }
 
-        if (!loc_.start(rx_, prior_map, seed, mapodom_buf_))
+        // Relocalizer accept gates (config-tunable without rebuild).
+        RelocConfig rcfg;
+        rcfg.fitness_max = lc["fitness_max"].as<double>(rcfg.fitness_max);
+        rcfg.max_jump_m  = lc["max_jump_m"].as<double>(rcfg.max_jump_m);
+        rcfg.max_yaw_deg = lc["max_yaw_deg"].as<double>(rcfg.max_yaw_deg);
+
+        if (!loc_.start(rx_, prior_map, seed, mapodom_buf_, rcfg))
             std::cerr << "[NavSystem] localization disabled (no prior map at " << prior_map
                       << "); named/map goals need it.\n";
     }
@@ -97,7 +103,8 @@ bool NavSystem::start(const std::string& config_path) {
     perc_.start(rx_, prod_, grid_buf_, costmap_buf_);
     plan_.start(costmap_buf_, goal_src_, path_buf_);
     ctrl_.start(path_buf_, prod_, costmap_buf_, goal_src_, cmd_buf_, cmd_pub_, drive_enabled, fc);
-    viz_.start(grid_buf_, costmap_buf_, path_buf_, pub_, perc_.gcfg(), prod_, rx_, mapodom_buf_);
+    viz_.start(grid_buf_, costmap_buf_, path_buf_, pub_, perc_.gcfg(), prod_, rx_, mapodom_buf_,
+               loc_.prior_xyz());   // prior map (map frame) for the rt/prior_map global-frame overlay
 
     std::cout << "[NavSystem] up: perception + planning + controller + viz (domain " << domain << ").\n";
     if (drive_enabled)

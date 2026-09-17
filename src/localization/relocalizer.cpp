@@ -75,7 +75,18 @@ void Relocalizer::add_scan(const LioCloud& scan) {
 std::size_t Relocalizer::submap_size() const { return impl_->submap->size(); }
 std::size_t Relocalizer::prior_size()  const { return impl_->prior->size(); }
 
-void Relocalizer::seed(const Eigen::Matrix4f& T) { T_map_odom_ = T; seeded_ = true; }
+std::vector<float> Relocalizer::prior_xyz() const {
+    std::vector<float> out;
+    out.reserve(impl_->prior->size() * 3);
+    for (const auto& p : *impl_->prior) { out.push_back(p.x); out.push_back(p.y); out.push_back(p.z); }
+    return out;
+}
+
+void Relocalizer::seed(const Eigen::Matrix4f& T) {
+    T_map_odom_ = T;
+    seed_yaw_ = std::atan2(T(1, 0), T(0, 0));   // reference heading for the yaw gate
+    seeded_ = true;
+}
 
 bool Relocalizer::align(double* fitness_out) {
     if (fitness_out) *fitness_out = -1.0;
@@ -104,6 +115,15 @@ bool Relocalizer::align(double* fitness_out) {
     const Eigen::Matrix4f T = g.getFinalTransformation();
     const double jump = (T.block<3,1>(0,3) - T_map_odom_.block<3,1>(0,3)).norm();
     if (fit > cfg_.fitness_max || jump > cfg_.max_jump_m) return false;   // reject: keep last
+
+    // Yaw gate: reject a solution rotated far from the (fixed) seed heading — kills 180deg flips
+    // in symmetric scenes. Assumes a roughly-correct seed yaw (constant boot heading).
+    if (cfg_.max_yaw_deg > 0.0) {
+        double dyaw = std::atan2(double(T(1,0)), double(T(0,0))) - double(seed_yaw_);
+        while (dyaw >  M_PI) dyaw -= 2.0 * M_PI;
+        while (dyaw < -M_PI) dyaw += 2.0 * M_PI;
+        if (std::abs(dyaw) > cfg_.max_yaw_deg * M_PI / 180.0) return false;
+    }
 
     T_map_odom_ = T;
     return true;

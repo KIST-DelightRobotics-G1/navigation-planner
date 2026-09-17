@@ -24,7 +24,8 @@ public:
 
     void start(DataBuffer<ObstacleGrid>& grid_buf, DataBuffer<Costmap>& costmap_buf,
                DataBuffer<Path>& path_buf, ObstacleGridPublisher& pub, ObstacleGridConfig gcfg,
-               LioTransformProducer& prod, LioReceiver& rx, DataBuffer<MapOdom>& mapodom);
+               LioTransformProducer& prod, LioReceiver& rx, DataBuffer<MapOdom>& mapodom,
+               std::vector<float> prior_map_xyz);
     void stop();
 
 private:
@@ -39,6 +40,7 @@ private:
     LioReceiver*              rx_          = nullptr;   // registered scan (for the sway cloud)
     DataBuffer<MapOdom>*      mapodom_     = nullptr;   // map->odom (for NAV_SURVEY map pose)
     bool                      survey_      = false;     // NAV_SURVEY=1: print robot map pose
+    std::vector<float>        prior_map_xyz_;           // prior map (map frame) for the odom overlay
 
     std::thread       thread_;
     std::atomic<bool> running_{false};

@@ -47,6 +47,7 @@ public:
                const std::string& lidar_pose_topic  = "rt/lidar_pose",
                const std::string& pelvis_pose_topic = "rt/pelvis_pose",
                const std::string& sway_cloud_topic  = "rt/cloud_sway",
+               const std::string& prior_map_topic   = "rt/prior_map",
                const std::string& frame_id        = "camera_init");   // LIO odom frame
 
     // Convert + publish one grid snapshot (and the robot pose from grid.robot_*).
@@ -61,6 +62,11 @@ public:
     // the torso sway (lidar-vs-pelvis rotation), so in odom it visibly swings with the gait — the
     // sway magnitude the pelvis stabilization removes. `xyz` is flat odom points (x0,y0,z0,...).
     void publish_cloud(const std::vector<float>& xyz);
+
+    // The prior map drawn IN THE ODOM FRAME (caller pre-transforms it by T_odom_map) on
+    // rt/prior_map, so it overlays the live obstacle grid — the global frame's structure vs the
+    // live scene. When localised it sits on the live walls; misalignment shows the map->odom error.
+    void publish_prior(const std::vector<float>& xyz);
 
     // Publish the costmap as an OccupancyGrid (cost 0..lethal -> 0..100) on rt/costmap.
     void publish_costmap(const Costmap& cm);
@@ -100,6 +106,7 @@ private:
     std::unique_ptr<PosePub> lidar_pose_pub_;    // T_odom_lidar (raw, sways)
     std::unique_ptr<PosePub> pelvis_pose_pub_;   // T_odom_pelvis (stabilized)
     std::unique_ptr<PathPub> sway_cloud_pub_;    // registered scan + sway (shaking, rt/cloud_sway)
+    std::unique_ptr<PathPub> prior_map_pub_;     // prior map in odom (global-frame overlay)
 };
 
 } // namespace kist

@@ -77,7 +77,7 @@ bool ObstacleGridPublisher::start(int domain_id, const std::string& network_inte
                                   const std::string& raw_path_topic, const std::string& clearance_topic,
                                   const std::string& medial_topic, const std::string& lidar_pose_topic,
                                   const std::string& pelvis_pose_topic, const std::string& sway_cloud_topic,
-                                  const std::string& frame_id) {
+                                  const std::string& prior_map_topic, const std::string& frame_id) {
     frame_ = frame_id;
     try {
         unitree::robot::ChannelFactory::Instance()->Init(domain_id, network_interface);  // no-op if inited
@@ -101,6 +101,8 @@ bool ObstacleGridPublisher::start(int domain_id, const std::string& network_inte
         pelvis_pose_pub_->InitChannel();
         sway_cloud_pub_.reset(new PathPub(sway_cloud_topic));
         sway_cloud_pub_->InitChannel();
+        prior_map_pub_.reset(new PathPub(prior_map_topic));
+        prior_map_pub_->InitChannel();
     } catch (const std::exception& e) {
         std::cerr << "[ObstacleGridPublisher] DDS init failed: " << e.what() << "\n";
         return false;
@@ -185,6 +187,13 @@ void ObstacleGridPublisher::publish_cloud(const std::vector<float>& xyz) {
     sensor_msgs::msg::dds_::PointCloud2_ pc;
     make_cloud3d(pc, xyz, frame_);
     sway_cloud_pub_->Write(pc);
+}
+
+void ObstacleGridPublisher::publish_prior(const std::vector<float>& xyz) {
+    if (!prior_map_pub_ || xyz.empty()) return;
+    sensor_msgs::msg::dds_::PointCloud2_ pc;
+    make_cloud3d(pc, xyz, frame_);
+    prior_map_pub_->Write(pc);
 }
 
 void ObstacleGridPublisher::publish_costmap(const Costmap& cm) {

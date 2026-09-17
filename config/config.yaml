@@ -35,3 +35,8 @@ localization:
   prior_map: maps/prior_map.pcd
   seed: { x: 0.0, y: 0.0, yaw_deg: 0.0 }
   map_uwb_yaw_deg: 0.0
+  # Relocalizer accept gates (tunable without rebuild — restart to reload):
+  fitness_max: 0.05      # LOCK only if GICP fitness (mean sq err, m^2) <= this (RMS ~sqrt); loose
+                         # 0.30 accepts ~0.4m locks, 0.05 ~ RMS 0.22m — tighten for meaningful locks
+  max_jump_m: 1.0        # reject a correction translating map->odom more than this (m)
+  max_yaw_deg: 30        # reject a solution >this many deg from the seed heading (kills 180deg flips)

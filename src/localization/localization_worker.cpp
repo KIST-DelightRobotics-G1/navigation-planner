@@ -8,7 +8,9 @@
 namespace kist {
 
 bool LocalizationWorker::start(LioReceiver& rx, const std::string& prior_pcd,
-                               const Eigen::Matrix4f& seed, DataBuffer<MapOdom>& out) {
+                               const Eigen::Matrix4f& seed, DataBuffer<MapOdom>& out,
+                               const RelocConfig& rcfg) {
+    reloc_.set_config(rcfg);   // before load_prior (uses map_voxel_m)
     if (!reloc_.load_prior(prior_pcd)) {
         std::cerr << "[LocalizationWorker] prior map load failed: " << prior_pcd << "\n";
         return false;
