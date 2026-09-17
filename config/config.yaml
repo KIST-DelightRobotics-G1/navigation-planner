@@ -30,11 +30,13 @@ unitree:
 # gives the translation; you MATCH the boot heading so the yaw is seed.yaw_deg (usually 0).
 #   seed{x,y,yaw_deg} : fixed fallback used when UWB / sidecar is unavailable. yaw_deg doubles
 #                       as the map<-odom heading for the UWB seed (match your boot heading).
-#   map_uwb_yaw_deg   : map<-UWB rotation applied to the UWB translation (0 if map axes ~ UWB axes).
+#   map_uwb_yaw_deg   : map<-UWB rotation applied to the UWB displacement. The UWB anchor axes are
+#                       rotated ~90 deg from the odom/map axes (UWB x=left,y=back vs odom x=fwd,y=left),
+#                       so this is ~90; verified by the map xy landing on the true pose (only yaw left).
 localization:
   prior_map: maps/map.pcd      # written by kist-map-recorder (+ maps/map.uwb sidecar)
   seed: { x: 0.0, y: 0.0, yaw_deg: 0.0 }
-  map_uwb_yaw_deg: 0.0
+  map_uwb_yaw_deg: 90.0        # UWB axes ~90 deg rotated from odom (calibrated); fine-tune 88..92 if needed
   # Relocalizer accept gates (tunable without rebuild — restart to reload):
   fitness_max: 0.05      # LOCK only if GICP fitness (mean sq err, m^2) <= this (RMS ~sqrt); loose
                          # 0.30 accepts ~0.4m locks, 0.05 ~ RMS 0.22m — tighten for meaningful locks
