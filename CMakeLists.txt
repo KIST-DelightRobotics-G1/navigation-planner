@@ -215,10 +215,23 @@ target_link_libraries(test_obstacle_grid PRIVATE
     route_planner obstacle_grid_publisher goal_receiver lio_transform_producer lio_receiver
     unitree_state_reader yaml-cpp)
 
-# map_recorder — accumulate registered scans (rt/cloud_registered_1) into a voxel grid and
-# save a prior PCD map on Ctrl+C (our branch's FAST-LIO pcd_save is dead). ROS-free.
-add_executable(map_recorder test/tool_map_recorder.cpp)
-target_link_libraries(map_recorder PRIVATE lio_receiver uwb_receiver unitree_sdk2 yaml-cpp)
+# recorder/ — the map-recording WORKER: accumulate registered scans (rt/cloud_registered_1) into a
+# voxel grid + capture the map-origin UWB & odom pose P_B; save() writes the PCD + .uwb sidecar.
+# Owns its thread + accumulation loop (same worker split as the runtime stages).
+add_library(map_recorder STATIC src/recorder/map_recorder.cpp)
+target_include_directories(map_recorder PUBLIC include)
+target_link_libraries(map_recorder PUBLIC lio_receiver uwb_receiver)
+
+# system/map_recorder — the ASSEMBLER (mirrors nav_system): owns the readers + the MapRecorder
+# worker, wires + start/stops them. No loops here; the worker owns its thread.
+add_library(map_recorder_system STATIC src/system/map_recorder.cpp)
+target_include_directories(map_recorder_system PUBLIC include)
+target_link_libraries(map_recorder_system PUBLIC map_recorder lio_receiver uwb_receiver yaml-cpp)
+
+# kist-map-recorder — deployment entry (src/map_recorder_main.cpp, like src/main.cpp): run the
+# lifecycle, Ctrl+C to save maps/map.pcd (+ maps/map.uwb) with an overwrite prompt.
+add_executable(kist-map-recorder src/map_recorder_main.cpp)
+target_link_libraries(kist-map-recorder PRIVATE map_recorder_system unitree_sdk2 yaml-cpp)
 
 # localization/ — relocalizer: register a bounded local submap (from rt/cloud_registered_1,
 # odom) against the prior PCD map (map) via PCL GICP -> map->odom. PCL is hidden behind a PIMPL.
@@ -232,10 +245,13 @@ add_library(uwb_receiver STATIC src/localization/uwb_receiver.cpp)
 target_include_directories(uwb_receiver PUBLIC include)
 target_link_libraries(uwb_receiver PUBLIC unitree_sdk2 Eigen3::Eigen)
 
-# reloc_check — v0 validation: GICP a live submap onto the prior map from a manual seed;
-# prints fitness + T_map_odom and dumps reloc_overlay.pcd for a pcl_viewer overlap check.
+# reloc_check — v0 validation: GICP a live submap onto the prior map from a manual seed (classic),
+# or GLOBAL_INIT yaw-search from a live UWB fix + T_odom_pelvis (needs the producer/state/uwb libs);
+# prints fitness/curve + T_map_odom and dumps reloc_overlay.pcd for a pcl_viewer overlap check.
 add_executable(reloc_check test/tool_reloc_check.cpp)
-target_link_libraries(reloc_check PRIVATE localization lio_receiver unitree_sdk2 yaml-cpp)
+target_link_libraries(reloc_check PRIVATE localization uwb_receiver lio_receiver
+                      lio_transform_producer unitree_state_reader obstacle_grid_publisher
+                      unitree_sdk2 yaml-cpp)
 
 # ─── LIO engine: external DDS service (not built here) ────────────────────────
 # LIO now runs as a separate ROS2 process (deepglint FAST_LIO_LOCALIZATION_HUMANOID,

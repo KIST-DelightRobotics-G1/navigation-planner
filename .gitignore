@@ -85,9 +85,10 @@ build/
 # runtime state (persisted yaw bias, etc.)
 state/
 
-# LIO cloud dumps + UWB map-origin sidecars (machine-local map artifacts)
+# LIO cloud dumps + UWB map-origin sidecars + edited map clouds (machine-local map artifacts)
 *.pcd
 *.uwb
+*.ply
 
 # Python bytecode cache (ros2 launch generates lio_engine/__pycache__)
 __pycache__/

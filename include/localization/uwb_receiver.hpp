@@ -42,13 +42,14 @@ private:
     std::unique_ptr<Sub> sub_;
 };
 
-// Build an initial T_map_odom seed from UWB. Reads the recorded map-origin UWB from
-// `sidecar_path` (a "x y" text file written by map_recorder), grabs the current fix (waiting up
-// to wait_ms), and sets:
-//   translation = R(map_uwb_yaw) * (uwb_now - uwb_map_origin)   (odom origin's position in map)
-//   rotation    = R(seed_yaw)    (map<-odom heading; you match the boot heading, usually 0)
-// Returns false with out_seed untouched if the sidecar is missing or no fix arrives — the caller
-// then falls back to the config fixed seed.
+// Build a localization seed (robot xy in map) from UWB. Reads the sidecar written by map_recorder:
+//   line 1: UWB (x y)         — the UWB reading at capture
+//   line 2: P_B (x y yaw)     — the robot's map pose at that instant (optional; legacy file -> 0)
+// grabs the current fix (waiting up to wait_ms), and sets (double transform):
+//   translation = P_B + R(map_uwb_yaw) * (uwb_now - uwb_recorded)   (robot xy in map)
+//   rotation    = R(seed_yaw)   (fallback heading; the real yaw is found by the yaw search)
+// P_B removes the "recorder start != LIO boot" origin offset. Returns false (out_seed untouched) if
+// the sidecar is missing or no fix arrives — the caller falls back to the config fixed seed.
 bool uwb_compute_seed(UwbReceiver& uwb, const std::string& sidecar_path,
                       float map_uwb_yaw_rad, float seed_yaw_rad,
                       Eigen::Matrix4f& out_seed, int wait_ms = 2000);

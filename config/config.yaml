@@ -26,13 +26,13 @@ unitree:
 # localization disabled (rviz odom goals still work).
 #
 # Seed (initial map<-odom guess for GICP): computed from UWB when available — the recorded
-# map-origin UWB (sidecar maps/prior_map.uwb, written by map_recorder) vs the live boot fix
+# map-origin UWB (sidecar maps/map.uwb, written by kist-map-recorder) vs the live boot fix
 # gives the translation; you MATCH the boot heading so the yaw is seed.yaw_deg (usually 0).
 #   seed{x,y,yaw_deg} : fixed fallback used when UWB / sidecar is unavailable. yaw_deg doubles
 #                       as the map<-odom heading for the UWB seed (match your boot heading).
 #   map_uwb_yaw_deg   : map<-UWB rotation applied to the UWB translation (0 if map axes ~ UWB axes).
 localization:
-  prior_map: maps/prior_map.pcd
+  prior_map: maps/map.pcd      # written by kist-map-recorder (+ maps/map.uwb sidecar)
   seed: { x: 0.0, y: 0.0, yaw_deg: 0.0 }
   map_uwb_yaw_deg: 0.0
   # Relocalizer accept gates (tunable without rebuild — restart to reload):
