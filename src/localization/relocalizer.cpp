@@ -306,11 +306,24 @@ GlobalInitResult Relocalizer::global_init(const Eigen::Vector2f& tag_xy_map,
     r.inlier_ratio = r3;
     r.confidence   = confidence;
     r.T_map_odom   = T_at(yaw3);
-    r.ok = (r3 >= cfg_.gi_min_inlier_ratio) && (confidence >= cfg_.gi_min_confidence);
 
-    std::printf("[global_init] refine yaw=%.1f r=%.2f -> %s (inlier>=%.2f, conf>=%.2f)\n",
-                r.yaw_deg, r.inlier_ratio, r.ok ? "ACCEPT" : "reject",
-                cfg_.gi_min_inlier_ratio, cfg_.gi_min_confidence);
+    // Temporal-consistency: track the recent best yaws; a weakly-constrained spot's correct yaw stays
+    // stable frame-to-frame even when its single-frame confidence is low.
+    recent_best_yaws_.push_back(yaw3);
+    while (int(recent_best_yaws_.size()) > cfg_.gi_stable_frames) recent_best_yaws_.pop_front();
+    bool stable = int(recent_best_yaws_.size()) >= cfg_.gi_stable_frames;
+    if (stable) {
+        const float newest = recent_best_yaws_.back();
+        for (float y : recent_best_yaws_)
+            if (ang_dist_deg(y, newest) > cfg_.gi_stable_yaw_tol_deg) { stable = false; break; }
+    }
+    const bool inlier_ok = (r3 >= cfg_.gi_min_inlier_ratio);
+    const bool conf_ok   = (confidence >= cfg_.gi_min_confidence);
+    r.ok = inlier_ok && (conf_ok || stable);
+
+    std::printf("[global_init] refine yaw=%.1f r=%.2f conf=%.2f stable=%d/%d -> %s%s\n",
+                r.yaw_deg, r.inlier_ratio, confidence, int(recent_best_yaws_.size()), cfg_.gi_stable_frames,
+                r.ok ? "ACCEPT" : "reject", (r.ok && !conf_ok && stable) ? " (by stability)" : "");
 
     if (r.ok) { T_map_odom_ = r.T_map_odom; seed_yaw_ = yaw3 * float(M_PI) / 180.f; seeded_ = true; }
     return r;

@@ -17,6 +17,7 @@
 
 #include <Eigen/Geometry>
 #include <cstddef>
+#include <deque>
 #include <memory>
 #include <string>
 #include <vector>
@@ -49,6 +50,11 @@ struct RelocConfig {
     float  gi_min_confidence   = 0.25f;  // reject init if (best-second)/best margin is below this
     int    gi_top_k            = 3;      // GICP-refine this many distinct peaks (Phase 2)
     float  gi_xy_gate_m        = 0.30f;  // refine xy drift from UWB beyond this -> clamp (Phase 2)
+    // Temporal-consistency accept: a correct yaw at a weakly-constrained spot (few walls) may have low
+    // single-frame confidence but stays stable frame-to-frame. Accept a low-confidence result if the
+    // best yaw has been within +/- tol across this many consecutive frames (still needs the inlier gate).
+    int    gi_stable_frames    = 5;      // frames the best yaw must be stable over to lock on stability
+    float  gi_stable_yaw_tol_deg = 3.0f; // max spread of the recent best yaws to count as "stable"
     // Floor/ceiling removal for the yaw score: the floor matches the prior at ANY yaw (and a dense
     // prior + a generous inlier threshold makes it worse), washing out the yaw signal — only walls
     // / vertical structure constrain yaw. We keep a floor-filtered copy of the prior + submap FOR
@@ -142,6 +148,7 @@ private:
     Eigen::Matrix4f T_map_odom_ = Eigen::Matrix4f::Identity();
     bool            seeded_ = false;
     float           seed_yaw_ = 0.f;   // heading of the seed — the yaw gate's reference
+    std::deque<float> recent_best_yaws_;   // recent global_init best yaws (deg) — for stability accept
 };
 
 }  // namespace kist

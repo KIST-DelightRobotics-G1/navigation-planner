@@ -102,6 +102,8 @@ int main(int argc, char** argv) {
         rc.gi_floor_filter     = envf("FLOOR_FILTER",  rc.gi_floor_filter ? 1.f : 0.f) != 0.f;
         rc.gi_floor_band_m     = envf("FLOOR_BAND",    rc.gi_floor_band_m);
         rc.gi_wall_top_m       = envf("WALL_TOP",      rc.gi_wall_top_m);
+        rc.gi_stable_frames      = int(envf("STABLE_FRAMES", float(rc.gi_stable_frames)));
+        rc.gi_stable_yaw_tol_deg = envf("STABLE_TOL",  rc.gi_stable_yaw_tol_deg);
         reloc.set_config(rc);
     }
     if (!reloc.load_prior(prior_path)) return 1;
