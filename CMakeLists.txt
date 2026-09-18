@@ -57,6 +57,10 @@ if(CYCLONE_IDLC)
 
     add_executable(test_goal_recv test/test_goal_recv.cpp)
     target_link_libraries(test_goal_recv PRIVATE goal_generation yaml-cpp)
+
+    # NavStatus subscriber — watch the controller state back-channel (rt/kist/nav/status).
+    add_executable(test_nav_status_sub test/test_nav_status_sub.cpp)
+    target_link_libraries(test_nav_status_sub PRIVATE goal_generation yaml-cpp)
 else()
     message(STATUS "CycloneDDS idlc not found — skipping kist_nav DDS types (goal_generation)")
 endif()
