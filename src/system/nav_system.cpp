@@ -47,11 +47,17 @@ bool NavSystem::start(const std::string& config_path) {
     pub_started_ = true;
     if (!cmd_pub_.start(domain)) { std::cerr << "[NavSystem] cmd publisher failed\n"; stop(); return false; }
     cmd_pub_started_ = true;
+    if (!status_pub_.start(domain)) { std::cerr << "[NavSystem] status publisher failed\n"; stop(); return false; }
+    status_pub_started_ = true;
 
     // ── worker config (env) ───────────────────────────────────────────────────
     // Follower cruise speed is env-tunable; terminal dock behavior is per-destination (config).
     FollowConfig fc;
     if (const char* v = std::getenv("NAV_VMAX")) fc.v_max = std::atof(v);
+    // Arrival debounce: ARRIVED is only published after the robot holds at the goal this long
+    // (default 1.0 s; env-tunable) so a one-frame flicker never falsely signals arrival.
+    double arrival_hold_s = 1.0;
+    if (const char* v = std::getenv("NAV_ARRIVAL_HOLD")) arrival_hold_s = std::atof(v);
     // Driving is opt-in: only NAV_DRIVE=1 arms the Twist output. Default = preview (no motion).
     const bool drive_enabled = [] { const char* v = std::getenv("NAV_DRIVE"); return v && v[0] == '1'; }();
 
@@ -102,7 +108,8 @@ bool NavSystem::start(const std::string& config_path) {
     goal_src_.bind(&gr_.goal_buf, &goalcmd_.result(), &mapodom_buf_);
     perc_.start(rx_, prod_, grid_buf_, costmap_buf_);
     plan_.start(costmap_buf_, goal_src_, path_buf_);
-    ctrl_.start(path_buf_, prod_, costmap_buf_, goal_src_, cmd_buf_, cmd_pub_, drive_enabled, fc);
+    ctrl_.start(path_buf_, prod_, costmap_buf_, goal_src_, cmd_buf_, cmd_pub_, status_pub_,
+                drive_enabled, fc, arrival_hold_s);
     viz_.start(grid_buf_, costmap_buf_, path_buf_, pub_, perc_.gcfg(), prod_, rx_, mapodom_buf_,
                loc_.prior_xyz());   // prior map (map frame) for the rt/prior_map global-frame overlay
 
@@ -124,6 +131,7 @@ void NavSystem::stop() {
     perc_.stop();
     loc_.stop();
     if (cmd_pub_started_) { cmd_pub_.stop(); cmd_pub_started_ = false; }   // final zero Twist
+    if (status_pub_started_) { status_pub_.stop(); status_pub_started_ = false; }
     if (uwb_started_) { uwb_.stop(); uwb_started_ = false; }
     if (goalcmd_started_) { goalcmd_.stop(); goalcmd_started_ = false; }
     if (destpub_started_) { destpub_.stop(); destpub_started_ = false; }

@@ -37,4 +37,17 @@ module kist_msgs {
         string             name;    // destination name; "" = cancel
     };
 
+    // Planner -> peers (rt/kist/nav/status): the controller's current navigation state,
+    // published continuously at a low rate (+ immediately on change) so an orchestrator /
+    // LLM can close the run-to-completion loop. ARRIVED is DEBOUNCED — it is only reported
+    // after the robot holds at the goal (aligned + at standoff) for arrival_hold_s, so a
+    // one-frame flicker never falsely signals arrival. It stays ARRIVED until a new goal.
+    //   state: 0 IDLE (no goal), 1 DRIVING, 2 ALIGNING, 3 APPROACHING, 4 ARRIVED, 5 BLOCKED.
+    struct NavStatus {
+        unsigned long long seq;
+        long long          stamp_ns;
+        string             name;     // active goal name; "" = idle (no goal)
+        octet              state;    // see the enumeration above
+    };
+
 };

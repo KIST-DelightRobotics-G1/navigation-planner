@@ -160,6 +160,13 @@ add_library(controller STATIC
     src/controller/nav_command_publisher.cpp)
 target_include_directories(controller PUBLIC include)
 target_link_libraries(controller PUBLIC route_planner unitree_sdk2)   # Costmap + DDS Twist
+# NavStatusPublisher (rt/kist/nav/status) needs the generated kist_nav types, so it is only
+# compiled into controller when idlc is available — same gate as goal_generation. Consumers of
+# the status back-channel (nav_system) already require idlc, so this adds no new constraint.
+if(CYCLONE_IDLC)
+    target_sources(controller PRIVATE src/controller/nav_status_publisher.cpp)
+    target_link_libraries(controller PUBLIC kist_nav_idl)
+endif()
 
 # system/ — the deployment facade: owns the readers/producer + RoutePlanner + publisher, and
 # runs the perception / planner / viz threads. The kist-navigation-planner binary runs this.

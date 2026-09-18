@@ -22,6 +22,13 @@ struct Pose2D {
 // Follower phase (status/telemetry, not control).
 enum class FollowPhase { Driving, Aligning, Approaching, Arrived, Blocked };
 
+// Published navigation state (rt/kist/nav/status wire codes — keep in sync with the NavStatus
+// enumeration in idl/kist_nav.idl). Idle = no active goal; Arrived is the DEBOUNCED confirmation
+// (the controller worker only emits it after the robot holds at the goal for arrival_hold_s).
+enum class NavState : uint8_t {
+    Idle = 0, Driving = 1, Aligning = 2, Approaching = 3, Arrived = 4, Blocked = 5
+};
+
 // Per-destination terminal (dock) behavior: what the follower does once it reaches the goal.
 // Carried by the Goal, so each destination tunes its own docking (or turns it off). An
 // ad-hoc rviz goal uses the default (align + approach both off -> just stop at arrival_tol).

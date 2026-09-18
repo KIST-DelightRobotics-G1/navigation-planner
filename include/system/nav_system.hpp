@@ -14,6 +14,7 @@
 #include "common/data_buffer.hpp"
 #include "controller/nav_command.hpp"
 #include "controller/nav_command_publisher.hpp"
+#include "controller/nav_status_publisher.hpp"
 #include "goal_generation/destination_publisher.hpp"
 #include "goal_generation/goal_command_receiver.hpp"
 #include "lio/lio_receiver.hpp"
@@ -61,6 +62,7 @@ private:
     UwbReceiver           uwb_;        // UWB fixes (rt/kist/uwb/pose) — localization seed only
     ObstacleGridPublisher pub_;
     NavCommandPublisher   cmd_pub_;
+    NavStatusPublisher    status_pub_;   // controller state back-channel (rt/kist/nav/status)
 
     DataBuffer<ObstacleGrid> grid_buf_;
     DataBuffer<Costmap>      costmap_buf_;
@@ -80,7 +82,7 @@ private:
 
     bool sr_started_{false}, rx_started_{false}, gr_started_{false},
          destpub_started_{false}, goalcmd_started_{false}, uwb_started_{false},
-         pub_started_{false}, cmd_pub_started_{false};
+         pub_started_{false}, cmd_pub_started_{false}, status_pub_started_{false};
 };
 
 } // namespace kist
