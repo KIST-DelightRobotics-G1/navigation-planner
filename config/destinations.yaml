@@ -34,9 +34,15 @@ destinations:
     # home: no dock (just park at the point).
 
   - name: fridge
-    x: 1.90               # surveyed in the CURRENT map (NAV_SURVEY, robot parked facing the fridge)
+    # Goal is pulled BACK into free space (~0.5 m clear of the fridge's lethal disk) on purpose:
+    # if the goal sits inside goal_ignore_radius_m (0.30) of a lethal cell, A* routes the final
+    # path segment THROUGH lethal (it ignores lethal near the goal) and the controller's reactive
+    # stop — which has no such exemption — trips BLOCKED before docking can engage. Keeping the
+    # goal in the clear lets the drive phase finish cleanly; the `approach` creep below then holds
+    # the real standoff, so the final parked position is set by standoff_m (not by this x/y).
+    x: 1.65               # surveyed facing the fridge, then pulled back ~0.35 m into free space
     y: 0.05
     yaw_deg: 0.5          # arrival heading (robot faced the fridge)
     align: true           # turn to face the fridge
-    approach: true        # then creep up to it
-    standoff_m: 0.18      # stop 0.18 m from the (inflated) fridge — tuned on the real G1
+    approach: true        # then creep up to it — this sets the final stop distance
+    standoff_m: 0.19      # stop 0.19 m from the (inflated) fridge — tuned on the real G1
