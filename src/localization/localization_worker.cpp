@@ -53,6 +53,8 @@ bool LocalizationWorker::resolve_inputs(Eigen::Vector2f& uwb_xy, bool& have_uwb,
 void LocalizationWorker::run() {
     int64_t last_stamp = 0;
     int     n_scans    = 0;
+    int     lost_count = 0;                       // consecutive UWB-LOST frames (sustained -> reinit)
+    constexpr int kLostFrames = 5;                // re-init only after this many consecutive LOST
     auto    last_step  = std::chrono::steady_clock::now();
     auto    last_print = last_step;
     while (running_) {
@@ -65,6 +67,7 @@ void LocalizationWorker::run() {
 
         const auto now = std::chrono::steady_clock::now();
         if (now - last_step >= std::chrono::milliseconds(1000)) {   // ~1 Hz
+            const double dt = std::chrono::duration<double>(now - last_step).count();  // actual elapsed
             last_step = now;
 
             Eigen::Vector2f uwb_xy; bool have_uwb = false; Eigen::Matrix4f Tob;
@@ -83,13 +86,20 @@ void LocalizationWorker::run() {
             } else {
                 // ── TRACKING: EKF fuses GICP + UWB ──
                 phase = "track";
-                ekf_.predict();
+                ekf_.predict(dt);
                 Eigen::Matrix4f T_gicp;
                 if (reloc_.gicp_measure(ekf_.T_map_odom(), &T_gicp)) ekf_.update_gicp(T_gicp);
                 if (have_uwb && have_odom) {
                     bool lost = false;
                     ekf_.update_uwb(uwb_xy.cast<double>(), Tob, tag_in_pelvis_.cast<double>(), &lost);
-                    if (lost) { ekf_.reset(); phase = "LOST->reinit"; }   // extreme UWB disagreement
+                    // Reset only on SUSTAINED disagreement — a single UWB jitter spike is ignored
+                    // (its update was already gated out; one spike must not drop the lock).
+                    if (lost) {
+                        if (++lost_count >= kLostFrames) { ekf_.reset(); lost_count = 0; phase = "LOST->reinit"; }
+                        else phase = "track(uwb-spike)";
+                    } else {
+                        lost_count = 0;
+                    }
                 }
                 if (ekf_.seeded()) out_->SetData(MapOdom{ekf_.T_map_odom()});
             }

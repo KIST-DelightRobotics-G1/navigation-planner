@@ -21,9 +21,10 @@
 namespace kist {
 
 struct LocFilterConfig {
-    // Process noise per predict step (~1 Hz). map<-odom drifts slowly, so keep small.
-    double q_xy_m    = 0.05;   // position random-walk std per cycle (m)
-    double q_yaw_deg = 1.0;    // yaw      random-walk std per cycle (deg)
+    // Process noise as a random-walk RATE (variance added per predict = q^2 * dt), so irregular
+    // loop timing / long GICP skips grow P correctly (std ~ sqrt(dt)). map<-odom drifts slowly.
+    double q_xy_m    = 0.05;   // position random-walk std, m / sqrt(s)
+    double q_yaw_deg = 1.0;    // yaw      random-walk std, deg / sqrt(s)
     // Measurement noise (isotropic for now; GICP R can be made anisotropic from the Hessian later).
     double gicp_sigma_xy_m  = 0.10;
     double gicp_sigma_yaw_deg = 2.0;
@@ -31,8 +32,10 @@ struct LocFilterConfig {
     // Mahalanobis chi-square gates (reject a measurement whose normalized innovation exceeds this).
     double gicp_gate = 11.34;  // 3-DoF, ~99%
     double uwb_gate  = 9.21;   // 2-DoF, ~99%
-    // Extreme UWB<->prediction disagreement (m): flag LOST so the caller re-initializes.
-    double lost_uwb_m = 0.8;
+    // Extreme UWB<->prediction disagreement (m): flag LOST. A single spike is ignored — the worker
+    // only re-initializes after several consecutive LOST frames (UWB frame-to-frame jitter can be
+    // ~0.6m even with <30cm gating, so one spike must not nuke the lock).
+    double lost_uwb_m = 1.0;
     // Initial state covariance (from a fresh global_init seed).
     double init_sigma_xy_m  = 0.30;
     double init_sigma_yaw_deg = 5.0;
@@ -48,8 +51,9 @@ public:
     bool seeded() const { return seeded_; }
     void reset() { seeded_ = false; }   // drop the lock (LOST) — caller re-runs global_init
 
-    // Random-walk prediction; call once per cycle before the updates.
-    void predict();
+    // Random-walk prediction; call once per cycle before the updates. dt = seconds since the last
+    // predict (Q scales with dt so irregular loop timing is handled correctly).
+    void predict(double dt);
 
     // GICP measurement: the raw T_map_odom from GICP. Returns false if Mahalanobis-rejected
     // (state left unchanged). z is stored for the output pose.

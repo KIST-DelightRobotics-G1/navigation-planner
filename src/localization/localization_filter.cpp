@@ -23,12 +23,13 @@ void LocalizationFilter::seed(const Eigen::Matrix4f& T) {
     seeded_ = true;
 }
 
-void LocalizationFilter::predict() {
+void LocalizationFilter::predict(double dt) {
     if (!seeded_) return;
+    if (dt < 0.0) dt = 0.0;
     const double qxy = cfg_.q_xy_m, qyaw = cfg_.q_yaw_deg * kDeg2Rad;
-    P_(0, 0) += qxy * qxy;
-    P_(1, 1) += qxy * qxy;
-    P_(2, 2) += qyaw * qyaw;
+    P_(0, 0) += qxy * qxy * dt;                 // variance grows with elapsed time (random walk)
+    P_(1, 1) += qxy * qxy * dt;
+    P_(2, 2) += qyaw * qyaw * dt;
     // x_ unchanged (random walk).
 }
 
