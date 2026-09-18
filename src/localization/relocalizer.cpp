@@ -182,6 +182,25 @@ bool Relocalizer::align(double* fitness_out) {
     return true;
 }
 
+bool Relocalizer::gicp_measure(const Eigen::Matrix4f& init, Eigen::Matrix4f* T_out, double* fitness_out) {
+    if (fitness_out) *fitness_out = -1.0;
+    if (impl_->prior->empty()) return false;
+    ensure_submap();
+    if (impl_->submap->empty()) return false;
+
+    auto& g = impl_->gicp;
+    g.setMaximumIterations(cfg_.gicp_max_iter);
+    g.setMaxCorrespondenceDistance(cfg_.gicp_max_corr_m);
+    g.setInputSource(impl_->submap);                 // odom
+    g.setInputTarget(impl_->prior);                  // map
+    Cloud aligned;
+    g.align(aligned, init);                          // init guess = EKF-predicted T_map_odom
+    if (!g.hasConverged()) return false;
+    if (fitness_out) *fitness_out = g.getFitnessScore();
+    if (T_out) *T_out = g.getFinalTransformation();
+    return true;
+}
+
 float Relocalizer::score_candidate(const Eigen::Matrix4f& T, int stride, float* median_out) const {
     if (median_out) *median_out = -1.f;
     if (!impl_->kdtree_ready || impl_->submap_score->empty()) return 0.f;

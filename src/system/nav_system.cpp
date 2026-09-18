@@ -59,42 +59,41 @@ bool NavSystem::start(const std::string& config_path) {
     if (uwb_.start(domain)) uwb_started_ = true;
     else std::cerr << "[NavSystem] UWB receiver failed — localization seed uses config fallback\n";
 
-    // Localization: relocalize the live odom against the prior PCD -> map->odom. Non-fatal if
-    // the prior map is missing — the system still runs (rviz odom goals work; named/map goals
-    // stay on hold until a map is present). Seed comes from UWB (recorded map-origin vs live fix)
-    // when available, else the config fixed seed.
+    // Localization: yaw-search global_init (UWB xy + robust sweep) seeds a 3-state EKF that then
+    // fuses the GICP geometric constraint with the UWB position each cycle -> map->odom. Non-fatal if
+    // the prior map is missing (rviz odom goals still work; named/map goals hold until it locks).
     {
         const auto  lc = root["localization"];
         const std::string prior_map = lc["prior_map"].as<std::string>("maps/map.pcd");
         const float seed_yaw    = lc["seed"]["yaw_deg"].as<float>(0.f) * float(M_PI) / 180.f;
         const float map_uwb_yaw = lc["map_uwb_yaw_deg"].as<float>(0.f) * float(M_PI) / 180.f;
 
-        // config fixed seed (fallback): translation from seed{x,y}, rotation from seed.yaw_deg
-        Eigen::Matrix4f seed = Eigen::Matrix4f::Identity();
-        seed.block<3,3>(0,0) = Eigen::AngleAxisf(seed_yaw, Eigen::Vector3f::UnitZ()).toRotationMatrix();
-        seed(0,3) = lc["seed"]["x"].as<float>(0.f);
-        seed(1,3) = lc["seed"]["y"].as<float>(0.f);
+        // Fixed fallback seed (used only when no UWB is configured): seed{x,y,yaw_deg}.
+        Eigen::Matrix4f fallback = Eigen::Matrix4f::Identity();
+        fallback.block<3,3>(0,0) = Eigen::AngleAxisf(seed_yaw, Eigen::Vector3f::UnitZ()).toRotationMatrix();
+        fallback(0,3) = lc["seed"]["x"].as<float>(0.f);
+        fallback(1,3) = lc["seed"]["y"].as<float>(0.f);
 
-        // UWB seed: sidecar (map-origin UWB) sits next to the prior map (.pcd -> .uwb)
-        if (uwb_started_) {
-            std::string sidecar = prior_map;
-            const auto dot = sidecar.rfind(".pcd");
-            if (dot != std::string::npos && dot == sidecar.size() - 4) sidecar.replace(dot, 4, ".uwb");
-            else sidecar += ".uwb";
-            if (uwb_compute_seed(uwb_, sidecar, map_uwb_yaw, seed_yaw, seed))
-                std::cout << "[NavSystem] localization seed from UWB\n";
-            else
-                std::cout << "[NavSystem] localization seed = config fixed (UWB seed unavailable)\n";
-        }
+        // Sidecar (maps/map.uwb: UWB + P_B) next to the prior map (.pcd -> .uwb).
+        std::string sidecar = prior_map;
+        const auto dot = sidecar.rfind(".pcd");
+        if (dot != std::string::npos && dot == sidecar.size() - 4) sidecar.replace(dot, 4, ".uwb");
+        else sidecar += ".uwb";
 
-        // Relocalizer accept gates (config-tunable without rebuild). Resolution (map/submap voxel)
-        // is a fixed header default — edit RelocConfig in include/localization/relocalizer.hpp.
+        // UWB antenna offset in the pelvis/base frame (robot geometry; ~x fwd 3cm, z up 35cm).
+        const Eigen::Vector3f tag_in_pelvis(0.03f, 0.f, 0.35f);
+
+        // Relocalizer accept gates (config-tunable without rebuild). Voxel/EKF tuning are header
+        // defaults (RelocConfig / LocFilterConfig).
         RelocConfig rcfg;
         rcfg.fitness_max = lc["fitness_max"].as<double>(rcfg.fitness_max);
         rcfg.max_jump_m  = lc["max_jump_m"].as<double>(rcfg.max_jump_m);
         rcfg.max_yaw_deg = lc["max_yaw_deg"].as<double>(rcfg.max_yaw_deg);
+        LocFilterConfig fcfg;
 
-        if (!loc_.start(rx_, prior_map, seed, mapodom_buf_, rcfg))
+        UwbReceiver* uwb_ptr = uwb_started_ ? &uwb_ : nullptr;
+        if (!loc_.start(rx_, prod_, uwb_ptr, prior_map, sidecar, map_uwb_yaw, tag_in_pelvis,
+                        fallback, mapodom_buf_, rcfg, fcfg))
             std::cerr << "[NavSystem] localization disabled (no prior map at " << prior_map
                       << "); named/map goals need it.\n";
     }

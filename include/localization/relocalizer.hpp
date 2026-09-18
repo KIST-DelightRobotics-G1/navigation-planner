@@ -109,6 +109,11 @@ public:
     // (>=0 when GICP ran, <0 if it did not converge).
     bool align(double* fitness_out = nullptr);
 
+    // Run one GICP step from `init` and RETURN the raw result WITHOUT committing it to the internal
+    // estimate (no fitness/jump/yaw gates) — the measurement provider for the EKF. Returns false if
+    // GICP did not converge. `T_out` gets T_map_odom^GICP, `fitness_out` (opt) the GICP score.
+    bool gicp_measure(const Eigen::Matrix4f& init, Eigen::Matrix4f* T_out, double* fitness_out = nullptr);
+
     // Global initialization by yaw search. UWB pins the base xy in map; the base heading (yaw) is
     // unknown, so we sweep yaw over 0..360, score each candidate by robust point-to-prior overlap
     // (inlier ratio; people/clutter fall outside the inlier threshold and drop out), coarsen->refine

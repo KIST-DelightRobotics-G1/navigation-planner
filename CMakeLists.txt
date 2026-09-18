@@ -235,7 +235,9 @@ target_link_libraries(kist-map-recorder PRIVATE map_recorder_system unitree_sdk2
 
 # localization/ — relocalizer: register a bounded local submap (from rt/cloud_registered_1,
 # odom) against the prior PCD map (map) via PCL GICP -> map->odom. PCL is hidden behind a PIMPL.
-add_library(localization STATIC src/localization/relocalizer.cpp)
+add_library(localization STATIC
+    src/localization/relocalizer.cpp
+    src/localization/localization_filter.cpp)   # 3-state EKF: GICP + UWB -> T_map_odom (pure Eigen)
 target_include_directories(localization PUBLIC include ${PCL_INCLUDE_DIRS})
 target_link_libraries(localization PUBLIC Eigen3::Eigen ${PCL_LIBRARIES})
 
