@@ -102,13 +102,13 @@ cmake -B build && cmake --build build
 
 ## Usage
 
-Set up the config once before running (all keys:
-[docs/configuration.md](docs/configuration.md)):
+Set up the config once before running:
 
-- `config/config.yaml` — DDS domain + transport (the NIC lives in
-  `config/cyclonedds.xml`) and the localization block (`prior_map`,
-  `map_uwb_yaw_deg`, relocalizer gates).
-- `config/destinations.yaml` — the named destination catalog + per-destination dock.
+- `config/config.yaml` — DDS domain (`unitree.domain_id`) + transport
+  (`config/cyclonedds.xml` holds the NIC), localization (`prior_map`,
+  `map_uwb_yaw_deg`).
+- `config/destinations.yaml` — named destination catalog + per-destination dock.
+- All keys: [docs/configuration.md](docs/configuration.md).
 
 Everything below runs inside the container (`./docker/run.sh`); the LIO engine is
 baked into the same image. A new space needs a prior map first — record one with
