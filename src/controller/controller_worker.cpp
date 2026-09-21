@@ -11,10 +11,10 @@ void ControllerWorker::start(DataBuffer<Path>& path_buf, LioTransformProducer& p
                              DataBuffer<Costmap>& costmap_buf, GoalSource& goals,
                              DataBuffer<NavCommand>& cmd_buf, NavCommandPublisher& pub,
                              SubtaskStatePublisher& status_pub, bool drive_enabled,
-                             const FollowConfig& fc, double arrival_hold_s) {
+                             const FollowConfig& fc, double arrival_hold_s, double nopath_hold_s) {
     path_buf_ = &path_buf; prod_ = &prod; costmap_buf_ = &costmap_buf; goals_ = &goals;
     cmd_buf_ = &cmd_buf; pub_ = &pub; status_pub_ = &status_pub; drive_enabled_ = drive_enabled;
-    arrival_hold_s_ = arrival_hold_s;
+    arrival_hold_s_ = arrival_hold_s; nopath_hold_s_ = nopath_hold_s;
     ctrl_.set_config(fc);
     running_ = true;
     thread_ = std::thread(&ControllerWorker::run, this);
@@ -45,13 +45,14 @@ ControllerWorker::SubtaskReport ControllerWorker::step_status(const std::optiona
         if (!have_cur_ || pid != cur_plan_ || idx != cur_index_) {   // new subtask
             cur_plan_ = pid; cur_index_ = idx; have_cur_ = true;
             initial_dist_ = std::max(0.05f, goal_dist());    // capture start distance (avoid /0)
-            arrival_hold_ = 0.0;
+            arrival_hold_ = 0.0; nopath_hold_ = 0.0;
         }
         r.plan_id = pid; r.index = idx; r.action = goal->action;
         r.progress = std::clamp(1.0f - goal_dist() / initial_dist_, 0.0f, 1.0f);
 
         switch (phase) {
             case FollowPhase::Arrived:
+                nopath_hold_ = 0.0;
                 arrival_hold_ += dt;                         // settling at the goal
                 if (arrival_hold_ >= arrival_hold_s_) {      // debounced -> DONE
                     holding_ = true;
@@ -63,10 +64,15 @@ ControllerWorker::SubtaskReport ControllerWorker::step_status(const std::optiona
                 break;
             case FollowPhase::NoPath:
                 arrival_hold_ = 0.0;
-                r.status = SubtaskStatus::Failed; r.note = "no path";
+                nopath_hold_ += dt;                          // a transient no-path is still RUNNING;
+                if (nopath_hold_ >= nopath_hold_s_) {        // only a SUSTAINED one is a real failure
+                    r.status = SubtaskStatus::Failed; r.note = "no path";
+                } else {
+                    r.status = SubtaskStatus::Running;
+                }
                 break;
             default:                                          // Driving/Aligning/Approaching/Blocked
-                arrival_hold_ = 0.0;
+                arrival_hold_ = 0.0; nopath_hold_ = 0.0;
                 r.status = SubtaskStatus::Running;
                 break;
         }
@@ -74,7 +80,7 @@ ControllerWorker::SubtaskReport ControllerWorker::step_status(const std::optiona
     }
 
     // ── no active goal ──
-    arrival_hold_ = 0.0;
+    arrival_hold_ = 0.0; nopath_hold_ = 0.0;
     const GoalDisposition disp = goal ? goal->disp : GoalDisposition::None;
     if (disp == GoalDisposition::Failed) {                   // a fresh command was rejected
         holding_ = false; have_cur_ = false;

@@ -29,11 +29,12 @@ public:
     ~ControllerWorker() { stop(); }
 
     // `status_pub` publishes SubtaskState on rt/cortex/nav/state (10 Hz). `arrival_hold_s` is the
-    // debounce: the robot must hold at the goal (phase Arrived) this long before DONE is reported.
+    // arrival debounce (hold at goal this long -> DONE); `nopath_hold_s` is the no-path debounce
+    // (a transient no-path is reported RUNNING; only a sustained one this long -> FAILED "no path").
     void start(DataBuffer<Path>& path_buf, LioTransformProducer& prod, DataBuffer<Costmap>& costmap_buf,
                GoalSource& goals, DataBuffer<NavCommand>& cmd_buf, NavCommandPublisher& pub,
                SubtaskStatePublisher& status_pub, bool drive_enabled, const FollowConfig& fc,
-               double arrival_hold_s = 1.0);
+               double arrival_hold_s = 1.0, double nopath_hold_s = 4.0);
     void stop();
 
 private:
@@ -63,9 +64,11 @@ private:
     SubtaskStatePublisher*   status_pub_  = nullptr;
     bool                     drive_enabled_ = false;
     double                   arrival_hold_s_ = 1.0;
+    double                   nopath_hold_s_  = 4.0;
 
     // Subtask / arrival state machine (see step_status).
     double      arrival_hold_ = 0.0;      // accumulated time in phase Arrived (s)
+    double      nopath_hold_  = 0.0;      // accumulated time in phase NoPath (s) -> FAILED when sustained
     bool        holding_      = false;    // arrived + consumed -> report DONE until a new subtask
     std::string cur_plan_;                // subtask being tracked (for change detection / progress)
     uint16_t    cur_index_ = 0;

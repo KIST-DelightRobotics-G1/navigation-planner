@@ -58,6 +58,10 @@ bool NavSystem::start(const std::string& config_path) {
     // (default 1.0 s; env-tunable) so a one-frame flicker never falsely signals arrival.
     double arrival_hold_s = 1.0;
     if (const char* v = std::getenv("NAV_ARRIVAL_HOLD")) arrival_hold_s = std::atof(v);
+    // No-path debounce: a transient no-path is reported RUNNING; only a sustained one this long is
+    // reported FAILED "no path" (default 4.0 s; env-tunable) so a brief replan gap never aborts a run.
+    double nopath_hold_s = 4.0;
+    if (const char* v = std::getenv("NAV_NOPATH_HOLD")) nopath_hold_s = std::atof(v);
     // Driving is opt-in: only NAV_DRIVE=1 arms the Twist output. Default = preview (no motion).
     const bool drive_enabled = [] { const char* v = std::getenv("NAV_DRIVE"); return v && v[0] == '1'; }();
 
@@ -109,7 +113,7 @@ bool NavSystem::start(const std::string& config_path) {
     perc_.start(rx_, prod_, grid_buf_, costmap_buf_);
     plan_.start(costmap_buf_, goal_src_, path_buf_);
     ctrl_.start(path_buf_, prod_, costmap_buf_, goal_src_, cmd_buf_, cmd_pub_, status_pub_,
-                drive_enabled, fc, arrival_hold_s);
+                drive_enabled, fc, arrival_hold_s, nopath_hold_s);
     viz_.start(grid_buf_, costmap_buf_, path_buf_, pub_, perc_.gcfg(), prod_, rx_, mapodom_buf_,
                loc_.prior_xyz());   // prior map (map frame) for the rt/prior_map global-frame overlay
 
