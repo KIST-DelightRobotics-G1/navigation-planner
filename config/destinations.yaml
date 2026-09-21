@@ -40,9 +40,9 @@ destinations:
     # stop — which has no such exemption — trips BLOCKED before docking can engage. Keeping the
     # goal in the clear lets the drive phase finish cleanly; the `approach` creep below then holds
     # the real standoff, so the final parked position is set by standoff_m (not by this x/y).
-    x: 1.90               # surveyed facing the fridge, then pulled back ~0.35 m into free space
-    y: 0.05
-    yaw_deg: 0.5          # arrival heading (robot faced the fridge)
+    x: 1.866              # surveyed facing the fridge, then pulled back ~0.35 m into free space
+    y: 0.209
+    yaw_deg: -19.7        # arrival heading (robot faced the fridge)
     align: true           # turn to face the fridge
     approach: true        # then creep up to it — this sets the final stop distance
-    standoff_m: 0.19      # stop 0.19 m from the (inflated) fridge — tuned on the real G1
+    standoff_m: 0.22      # stop 0.19 m from the (inflated) fridge — tuned on the real G1
