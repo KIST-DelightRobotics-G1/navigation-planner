@@ -102,44 +102,42 @@ cmake -B build && cmake --build build
 
 ## Usage
 
-Set up the config once before running:
+Set up the config once before running (all keys:
+[docs/configuration.md](docs/configuration.md)):
 
-- `config/config.yaml` — DDS domain (`unitree.domain_id`) + transport
-  (`config/cyclonedds.xml` holds the NIC), and the localization block
-  (`prior_map`, `map_uwb_yaw_deg`, relocalizer gates).
-- `config/destinations.yaml` — the named destination catalog (map-frame `x/y/yaw`
-  + per-destination dock: `align` / `approach` / `standoff_m`).
+- `config/config.yaml` — DDS domain + transport (the NIC lives in
+  `config/cyclonedds.xml`) and the localization block (`prior_map`,
+  `map_uwb_yaw_deg`, relocalizer gates).
+- `config/destinations.yaml` — the named destination catalog + per-destination dock.
 
-The planner is one of three cooperating processes — it needs the **LIO engine**
-running (localization input) and **kist-gearsonic-inference** running to actually
-move the robot: nav publishes a `Twist` on `rt/kist/nav/cmd_vel`, but gearsonic
-only actuates it once its **walk mode is manually enabled**.
+Everything below runs inside the container (`./docker/run.sh`); the LIO engine is
+baked into the same image. A new space needs a prior map first — record one with
+`./build/kist-map-recorder` (see Installation step 5).
+
+**`NAV_DRIVE=1` MOVES THE ROBOT** — clear the area and keep gearsonic's e-stop in reach.
 
 ```bash
-# preview only (no Twist published; robot will NOT move) — verify localization lock
-./build/kist-navigation-planner
+# 1. LIO engine — localization input (/Odometry_loc + /cloud_registered_1)
+lio_up                                    # start, detached (lio_down to stop; tail -f /tmp/lio_engine.log)
 
-# drive (arms the Twist output; THE ROBOT WILL MOVE — clear the area, estop ready)
-NAV_DRIVE=1 ./build/kist-navigation-planner
+# 2. navigation planner
+./build/kist-navigation-planner           # preview: no Twist, robot will NOT move (verify the lock)
+NAV_DRIVE=1 ./build/kist-navigation-planner   # drive: arms the Twist output — THE ROBOT WILL MOVE
 ```
 
-Command a destination by name and watch the result over DDS (the cortex
-orchestrator contract):
+The planner publishes a `Twist` on `rt/kist/nav/cmd_vel`, but the robot only moves
+once **kist-gearsonic-inference** is running **and its walk mode is manually
+enabled** (see that repo) — nav being "up" is not enough on its own.
 
-- **in** — `SubtaskCmd` on `rt/cortex/nav/cmd`: `action: "move_to"`, `args: ["<destination>"]`
-  (or `cancel: true`).
-- **out** — `SubtaskState` on `rt/cortex/nav/state` at 10 Hz:
-  `IDLE / RUNNING / DONE / FAILED` + progress + note.
-
-Without a peer, drive the contract from the test tools:
+Command a destination and watch the result — the cortex orchestrator contract
+(`SubtaskCmd` in on `rt/cortex/nav/cmd`; `SubtaskState` out on `rt/cortex/nav/state`
+at 10 Hz: `IDLE / RUNNING / DONE / FAILED` + progress + note). Without the
+orchestrator, drive it from the test tools:
 
 ```bash
-./build/test_subtask_cmd_send fridge      # move_to fridge
-./build/test_subtask_cmd_send --cancel    # cancel
 ./build/test_subtask_state_sub            # watch rt/cortex/nav/state
+./build/test_subtask_cmd_send fridge      # move_to a named destination
+./build/test_subtask_cmd_send --cancel    # cancel the current subtask
 ```
 
 An ad-hoc goal from rviz ("2D Goal Pose", odom frame) also works for quick tests.
-
-Tuning knobs (env, no rebuild): `NAV_VMAX` (cruise speed), `NAV_ARRIVAL_HOLD`
-(arrival debounce, s), `NAV_NOPATH_HOLD` (no-path → FAILED debounce, s).
