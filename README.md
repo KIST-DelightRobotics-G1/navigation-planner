@@ -118,7 +118,7 @@ baked into the same image. A new space needs a prior map first — record one wi
 
 ```bash
 # 1. LIO engine — localization input (/Odometry_loc + /cloud_registered_1)
-lio_up                                    # start, detached (lio_down to stop; tail -f /tmp/lio_engine.log)
+run_lio_daemon                                    # start, detached (stop_lio_daemon to stop; tail -f /tmp/lio_engine.log)
 
 # 2. navigation planner
 ./build/kist-navigation-planner           # preview: no Twist, robot will NOT move (verify the lock)

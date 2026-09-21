@@ -12,7 +12,7 @@ maps/map.uwb     # UWB sidecar (deploy-time localization seed)
 ```
 Point everything at this path (the relocalizer config + the destination survey). Frame = the
 **odom frame of the mapping run that produced it** — this frame IS the `map` frame, and its origin
-is the robot pose at **`lio_up` (LIO boot)**. Every destination in `config/destinations.yaml` must
+is the robot pose at **`run_lio_daemon` (LIO boot)**. Every destination in `config/destinations.yaml` must
 be surveyed in THESE coordinates.
 
 The `.uwb` sidecar has two lines:
@@ -28,11 +28,11 @@ recorder is started after the robot has moved from the LIO-boot origin.
 FAST-LIO's built-in `pcd_save` is dead in our branch, so we record it ourselves with the
 `kist-map-recorder` tool (accumulates `rt/cloud_registered_1` → voxel grid → PCD + UWB sidecar):
 ```
-lio_up
+run_lio_daemon
 ./build/kist-map-recorder                     # HOLD STILL ~5 s first (origin UWB+P_B is averaged
 #                                               over that window), THEN drive the whole environment
 #   Ctrl+C to stop; if maps/map.* exist you are asked to confirm the overwrite
-lio_down
+stop_lio_daemon
 pcl_viewer maps/map.pcd                        # sanity-check: crisp walls, no ghost/double walls
 ```
 The first ~5 s are averaged into the map-origin correspondence (`maps/map.uwb`), so keep the robot
@@ -41,4 +41,4 @@ Output is always `maps/map.pcd` + `maps/map.uwb`. The voxel leaf is fixed at 0.0
 edit `MapRecorderConfig` in `include/recorder/map_recorder.hpp` and rebuild.
 
 Re-record whenever the environment changes enough that relocalization degrades. Keep the map frame
-stable (same `lio_up` origin) or destinations must be re-surveyed.
+stable (same `run_lio_daemon` origin) or destinations must be re-surveyed.

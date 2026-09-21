@@ -8,10 +8,10 @@ source /opt/ros/humble/setup.bash 2>/dev/null || true
 
 # Start the LIO engine (Livox driver + FAST-LIO) detached via our bringup launch.
 # The planner then consumes /Odometry_loc + /cloud_registered_1 over DDS.
-#   lio_up            # start
+#   run_lio_daemon     # start
 #   tail -f /tmp/lio_engine.log
-#   lio_down          # stop
-lio_up() {
+#   stop_lio_daemon    # stop
+run_lio_daemon() {
     if pgrep -f lio_bringup.launch.py >/dev/null 2>&1; then
         echo "LIO engine already running (tail -f /tmp/lio_engine.log)."
         return 0
@@ -24,8 +24,8 @@ lio_up() {
     echo "LIO engine started (log: /tmp/lio_engine.log)."
 }
 
-# Stop the LIO engine (kills the driver + FAST-LIO started by lio_up).
-lio_down() {
+# Stop the LIO engine (kills the driver + FAST-LIO started by run_lio_daemon).
+stop_lio_daemon() {
     local stopped=0
     for pat in lio_bringup.launch.py fastlio_mapping livox_ros_driver2_node; do
         pkill -f "$pat" 2>/dev/null && stopped=1

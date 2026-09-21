@@ -87,7 +87,7 @@ RUN cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j"$(nproc)
 RUN ldconfig
 
 # Auto-source env.sh in interactive shells (run.sh entry + `docker exec -it`), so ROS +
-# the LIO overlay are set up and `lio_up` / `lio_down` are always available. No ENTRYPOINT
+# the LIO overlay are set up and `run_lio_daemon` / `stop_lio_daemon` are always available. No ENTRYPOINT
 # — the interactive shell + ~/.bashrc do the sourcing (same shape as gearsonic).
 RUN echo 'source /workspace/kist-navigation-planner/env.sh' >> /root/.bashrc
 

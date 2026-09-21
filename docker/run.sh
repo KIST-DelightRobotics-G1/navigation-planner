@@ -28,7 +28,7 @@ xhost +local:root >/dev/null 2>&1 || true
 
 # The image is self-contained (deps + engine + source baked and built); NO source
 # mount — run.sh drops you into a container with ready binaries under build/, so you
-# never build inside. env.sh is auto-sourced (ROS + lio_up/lio_down ready).
+# never build inside. env.sh is auto-sourced (ROS + run_lio_daemon/stop_lio_daemon ready).
 #
 # Iterative dev: add  -v "${REPO_DIR}":/workspace/kist-navigation-planner  below to
 # shadow the baked source with your working copy — then rebuild inside (the bind mount

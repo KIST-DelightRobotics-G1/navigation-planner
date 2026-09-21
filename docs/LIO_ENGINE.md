@@ -43,7 +43,7 @@ downsampled scan; set true for the full ~20k points).
 ## Run
 
 Two commands on the **host**, everything else **inside the container** (`env.sh` is
-auto-sourced, so `ros2` + `lio_up` / `lio_down` are ready in every shell):
+auto-sourced, so `ros2` + `run_lio_daemon` / `stop_lio_daemon` are ready in every shell):
 
 ```bash
 # host
@@ -51,9 +51,9 @@ auto-sourced, so `ros2` + `lio_up` / `lio_down` are ready in every shell):
 ./docker/run.sh            # enter the container (--network host, X11, source mounted)
 
 # inside the container (binaries are already baked/built — no cmake needed)
-lio_up                                          # start the engine (driver + FAST-LIO), detached
+run_lio_daemon                                          # start the engine (driver + FAST-LIO), detached
 ./build/test_lio_receiver config/config.yaml    # planner consumes the engine over DDS
-lio_down                                         # stop the engine
+stop_lio_daemon                                         # stop the engine
 tail -f /tmp/lio_engine.log                      # watch engine logs
 ```
 
@@ -61,12 +61,12 @@ The image is self-contained (source + binaries baked by `docker build`), so `run
 drops you into a container with ready binaries under `build/` — no in-container build.
 For iterative dev, uncomment the source bind-mount in `docker/run.sh` and rebuild inside.
 
-`lio_up` runs `ros2 launch .../lio_engine/lio_bringup.launch.py` — driver + FAST-LIO
+`run_lio_daemon` runs `ros2 launch .../lio_engine/lio_bringup.launch.py` — driver + FAST-LIO
 together, using **our** config (`lio_engine/config/`), no manual multi-terminal. To change
 topics / config / what launches, edit `lio_engine/`; upstream source is untouched.
 
 Prereq: host is on the robot LAN (`192.168.123.222`), lidar reachable
-(`ping 192.168.123.120`). `lio_up` warns if it is not.
+(`ping 192.168.123.120`). `run_lio_daemon` warns if it is not.
 
 Optional rviz (inside the container; `run.sh` forwards X): `rviz2` — add displays by hand:
 Fixed Frame `camera_init`, PointCloud2 on `/cloud_registered_1` (raise Decay Time), Odometry
