@@ -52,15 +52,15 @@ if(CYCLONE_IDLC)
     add_executable(test_destination_sub test/test_destination_sub.cpp)
     target_link_libraries(test_destination_sub PRIVATE goal_generation yaml-cpp)
 
-    add_executable(test_goal_send test/test_goal_send.cpp)
-    target_link_libraries(test_goal_send PRIVATE goal_generation yaml-cpp)
+    add_executable(test_subtask_cmd_send test/test_subtask_cmd_send.cpp)
+    target_link_libraries(test_subtask_cmd_send PRIVATE goal_generation yaml-cpp)
 
     add_executable(test_goal_recv test/test_goal_recv.cpp)
     target_link_libraries(test_goal_recv PRIVATE goal_generation yaml-cpp)
 
-    # NavStatus subscriber — watch the controller state back-channel (rt/kist/nav/status).
-    add_executable(test_nav_status_sub test/test_nav_status_sub.cpp)
-    target_link_libraries(test_nav_status_sub PRIVATE goal_generation yaml-cpp)
+    # SubtaskState subscriber — watch the nav state back-channel (rt/cortex/nav/state).
+    add_executable(test_subtask_state_sub test/test_subtask_state_sub.cpp)
+    target_link_libraries(test_subtask_state_sub PRIVATE goal_generation yaml-cpp)
 else()
     message(STATUS "CycloneDDS idlc not found — skipping kist_nav DDS types (goal_generation)")
 endif()
@@ -150,7 +150,7 @@ target_include_directories(obstacle_grid_publisher PUBLIC include)
 target_link_libraries(obstacle_grid_publisher PUBLIC route_planner unitree_sdk2)
 
 # goal_receiver — rviz "2D Goal Pose" subscriber (rt/goal_pose), ad-hoc goals (dock off).
-# Named goals (rt/kist/nav/goal, with dock) come from goal_generation. Its header pulls in the
+# Subtask goals (rt/cortex/nav/cmd, with dock) come from goal_generation. Its header pulls in the
 # unified kist::Goal from goal_generation/goal.hpp (header-only), so no extra link is needed.
 add_library(goal_receiver STATIC src/planning/goal_receiver.cpp)
 target_include_directories(goal_receiver PUBLIC include)
@@ -164,11 +164,11 @@ add_library(controller STATIC
     src/controller/nav_command_publisher.cpp)
 target_include_directories(controller PUBLIC include)
 target_link_libraries(controller PUBLIC route_planner unitree_sdk2)   # Costmap + DDS Twist
-# NavStatusPublisher (rt/kist/nav/status) needs the generated kist_nav types, so it is only
+# SubtaskStatePublisher (rt/cortex/nav/state) needs the generated kist_nav types, so it is only
 # compiled into controller when idlc is available — same gate as goal_generation. Consumers of
 # the status back-channel (nav_system) already require idlc, so this adds no new constraint.
 if(CYCLONE_IDLC)
-    target_sources(controller PRIVATE src/controller/nav_status_publisher.cpp)
+    target_sources(controller PRIVATE src/controller/subtask_state_publisher.cpp)
     target_link_libraries(controller PUBLIC kist_nav_idl)
 endif()
 

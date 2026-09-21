@@ -52,7 +52,7 @@ bool GoalCommandReceiver::start(int domain_id, const std::string& network_interf
     try {
         unitree::robot::ChannelFactory::Instance()->Init(domain_id, network_interface);
         sub_ = std::make_shared<Sub>(topic);
-        sub_->InitChannel([this](const void* m) { on_command(m); }, 1);
+        sub_->InitChannel([this](const void* m) { on_command(m); }, 10);   // RELIABLE, depth 10
     } catch (const std::exception& e) {
         std::cerr << "[GoalCommandReceiver] DDS subscribe failed on \""
                   << network_interface << "\": " << e.what() << "\n";
@@ -68,23 +68,46 @@ void GoalCommandReceiver::stop() {
 }
 
 void GoalCommandReceiver::on_command(const void* message) {
-    const auto& msg = *static_cast<const kist_msgs::NavGoalCommand*>(message);
-    const std::string name = msg.name();
+    const auto& msg = *static_cast<const kist_msgs::SubtaskCmd*>(message);
+    const std::string plan_id = msg.plan_id();
+    const uint16_t    index   = msg.index();
+    const std::string action  = msg.action();
 
-    if (name.empty()) {                          // cancel / stop
-        goal_buf_.SetData(Goal{});               // valid = false
-        std::cout << "[GoalCommandReceiver] cancel\n";
+    auto emit = [&](GoalDisposition disp, const std::string& note) {
+        Goal g;                                  // valid = false
+        g.disp = disp; g.note = note;
+        g.plan_id = plan_id; g.index = index; g.action = action;
+        goal_buf_.SetData(g);
+    };
+
+    if (msg.cancel()) {                          // cancel (plan_id, index) — nav stops immediately
+        emit(GoalDisposition::Cancelled, "cancelled");
+        std::cout << "[GoalCommandReceiver] cancel (plan=" << plan_id << " idx=" << index << ")\n";
         return;
     }
+    if (action != "move_to") {                   // nav only drives; other actions are VLA's
+        emit(GoalDisposition::Failed, "unsupported: action '" + action + "' (nav handles move_to)");
+        std::cerr << "[GoalCommandReceiver] unsupported action '" << action << "' — FAILED\n";
+        return;
+    }
+    if (msg.args().size() < 1 || msg.args()[0].empty()) {
+        emit(GoalDisposition::Failed, "unsupported: move_to needs a destination arg");
+        std::cerr << "[GoalCommandReceiver] move_to with no destination arg — FAILED\n";
+        return;
+    }
+    const std::string name = msg.args()[0];
     const auto it = catalog_.find(name);
     if (it == catalog_.end()) {
-        std::cerr << "[GoalCommandReceiver] unknown destination '" << name << "' — ignored\n";
-        goal_buf_.SetData(Goal{});               // valid = false (no such goal)
+        emit(GoalDisposition::Failed, "unsupported: unknown destination '" + name + "'");
+        std::cerr << "[GoalCommandReceiver] unknown destination '" << name << "' — FAILED\n";
         return;
     }
-    goal_buf_.SetData(it->second);
-    std::cout << "[GoalCommandReceiver] goal -> '" << name << "' ("
-              << it->second.x << ", " << it->second.y << ")\n";
+    Goal g = it->second;                         // catalog template: valid=true, xy/yaw/dock
+    g.plan_id = plan_id; g.index = index; g.action = action;
+    g.disp = GoalDisposition::None; g.note.clear();
+    goal_buf_.SetData(g);
+    std::cout << "[GoalCommandReceiver] move_to '" << name << "' (plan=" << plan_id
+              << " idx=" << index << ") -> (" << g.x << ", " << g.y << ")\n";
 }
 
 } // namespace kist

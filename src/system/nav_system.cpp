@@ -118,8 +118,8 @@ bool NavSystem::start(const std::string& config_path) {
         std::cout << "  *** NAV_DRIVE=1 — Twist IS published: THE ROBOT WILL MOVE. estop ready. ***\n";
     else
         std::cout << "  controller PREVIEW only (no Twist, robot will NOT move). Set NAV_DRIVE=1 to drive.\n";
-    std::cout << "  goal: rviz 2D Goal Pose (ad-hoc), or a name on rt/kist/nav/goal "
-                 "(catalog: config/destinations.yaml). Ctrl+C to quit.\n";
+    std::cout << "  goal: rviz 2D Goal Pose (ad-hoc), or a SubtaskCmd move_to on rt/cortex/nav/cmd "
+                 "(catalog: config/destinations.yaml). state on rt/cortex/nav/state. Ctrl+C to quit.\n";
     return true;
 }
 

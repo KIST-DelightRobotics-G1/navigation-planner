@@ -16,6 +16,11 @@
 
 namespace kist {
 
+// Why a Goal is not Active (valid=false). Drives the SubtaskState the controller reports when
+// there is nothing to drive to: None = never commanded / idle, Cancelled = a cancel was received,
+// Failed = the command could not be accepted (unsupported action / bad args).
+enum class GoalDisposition : uint8_t { None, Cancelled, Failed };
+
 struct Goal {
     float x = 0.0f, y = 0.0f;   // destination position (m); frame given by in_map
     float yaw = 0.0f;           // finish heading to align to on arrival (rad)
@@ -26,6 +31,15 @@ struct Goal {
 
     std::string name;           // source destination name (destinations.yaml), for logging/mission
     DockConfig  dock;           // per-destination terminal behavior (align / approach / standoff)
+
+    // Cortex subtask provenance (carried through so SubtaskState can report the active subtask).
+    std::string  plan_id;       // orchestrator plan id ("" for rviz ad-hoc goals)
+    uint16_t     index = 0;     // subtask index within the plan
+    std::string  action;        // subtask action (nav: "move_to")
+
+    // When valid == false, WHY (and a human-readable note) — for SubtaskState reporting.
+    GoalDisposition disp = GoalDisposition::None;
+    std::string     note;       // e.g. "cancelled", "unsupported: ...", FAILED reason
 };
 
 } // namespace kist

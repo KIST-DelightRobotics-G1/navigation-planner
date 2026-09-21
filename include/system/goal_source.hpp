@@ -1,8 +1,8 @@
 #pragma once
 
 // GoalSource — the single active goal for the planner + controller, IN THE ODOM FRAME. It picks
-// the freshest of the two input channels (rviz ad-hoc `rt/goal_pose`, odom; and named command
-// `rt/kist/nav/goal`, map frame + dock), then converts a map-frame goal into odom using the
+// the freshest of the two input channels (rviz ad-hoc `rt/goal_pose`, odom; and the orchestrator
+// subtask `rt/cortex/nav/cmd`, map frame + dock), then converts a map-frame goal into odom using the
 // latest map->odom estimate — every call, so a fixed map destination tracks despite LIO drift /
 // relocalization jumps. Consumers just call active() and get an odom goal; check Goal::valid
 // (a cancel, or a map goal with no localization yet, comes back valid=false = stop).

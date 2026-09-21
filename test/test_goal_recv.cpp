@@ -1,6 +1,6 @@
-// Runs GoalCommandReceiver: subscribes to rt/kist/nav/goal, resolves each named
-// command against config/destinations.yaml, and logs the resolved Goal. Pair with
-// test_goal_send to verify the goal-command contract.
+// Runs GoalCommandReceiver: subscribes to rt/cortex/nav/cmd, resolves each move_to
+// subtask against config/destinations.yaml, and logs the resolved Goal. Pair with
+// test_subtask_cmd_send to verify the command contract.
 //   ./test_goal_recv [config_path]
 
 #include "goal_generation/goal_command_receiver.hpp"
@@ -32,7 +32,7 @@ int main(int argc, char** argv) {
 
     kist::GoalCommandReceiver rx;
     if (!rx.start(domain, "", dfile)) return 1;
-    std::printf("waiting for goal commands on %s (send with test_goal_send)\n", kist::kNavGoalTopic);
+    std::printf("waiting for subtask commands on %s (send with test_subtask_cmd_send)\n", kist::kNavCmdTopic);
 
     // Also report the resolved Goal buffer (yaw in deg) on change.
     int64_t last_seen = -1;

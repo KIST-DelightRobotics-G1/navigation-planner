@@ -14,7 +14,7 @@
 #include "common/data_buffer.hpp"
 #include "controller/nav_command.hpp"
 #include "controller/nav_command_publisher.hpp"
-#include "controller/nav_status_publisher.hpp"
+#include "controller/subtask_state_publisher.hpp"
 #include "goal_generation/destination_publisher.hpp"
 #include "goal_generation/goal_command_receiver.hpp"
 #include "lio/lio_receiver.hpp"
@@ -58,11 +58,11 @@ private:
     LioReceiver           rx_;
     GoalReceiver          gr_;         // rviz "2D Goal Pose" (rt/goal_pose) — ad-hoc, no dock
     DestinationPublisher  destpub_;    // advertises the catalog (rt/kist/nav/destinations)
-    GoalCommandReceiver   goalcmd_;    // named goals from a peer/LLM (rt/kist/nav/goal)
+    GoalCommandReceiver   goalcmd_;    // subtask commands from the orchestrator (rt/cortex/nav/cmd)
     UwbReceiver           uwb_;        // UWB fixes (rt/kist/uwb/pose) — localization seed only
     ObstacleGridPublisher pub_;
     NavCommandPublisher   cmd_pub_;
-    NavStatusPublisher    status_pub_;   // controller state back-channel (rt/kist/nav/status)
+    SubtaskStatePublisher status_pub_;   // subtask state back-channel (rt/cortex/nav/state)
 
     DataBuffer<ObstacleGrid> grid_buf_;
     DataBuffer<Costmap>      costmap_buf_;

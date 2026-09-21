@@ -4,11 +4,17 @@
 // header never collides with other repos' kist_msgs.hpp, while the C++ namespace
 // stays kist_msgs:: for cross-repo interop.
 //
-// Topics (rt/kist/nav/* convention):
+// Topics:
 //   "rt/kist/nav/destinations"  NavDestinationList  — this planner PUBLISHES the
-//       destination catalog (loaded from config/destinations.yaml) so any peer
-//       can address a goal by name. Re-published at a low rate for late joiners.
-//   (goal command + status types land here as the goal-over-DDS flow is built.)
+//       destination catalog (config/destinations.yaml) so any peer can address a
+//       goal by name. Re-published at a low rate for late joiners.
+//   "rt/cortex/nav/cmd"    SubtaskCmd    — orchestrator -> nav (RELIABLE, depth 10, event).
+//   "rt/cortex/nav/state"  SubtaskState  — nav -> orchestrator (RELIABLE, depth 10, 10 Hz).
+//     ("rt/" is the ROS2 topic prefix: ROS2 topic /cortex/nav/cmd == DDS topic rt/cortex/nav/cmd.)
+//
+// NOTE (ROS2 interop): the orchestrator is ROS2. Header/Time below mirror std_msgs/Header +
+// builtin_interfaces/Time by structure. If strict rmw type-name matching is required, align the
+// module/type names to the orchestrator's package when their .msg is shared.
 
 module kist_msgs {
 
@@ -29,26 +35,42 @@ module kist_msgs {
         sequence<NavDestination>  destinations;
     };
 
-    // Goal command from a peer (rt/kist/nav/goal): go to the named destination.
-    // The planner resolves the name against the catalog. Empty name = cancel/stop.
-    struct NavGoalCommand {
-        unsigned long long seq;
-        long long          stamp_ns;
-        string             name;    // destination name; "" = cancel
+    // ── cortex orchestrator contract (shared with the VLA module) ─────────────────
+    // builtin_interfaces/Time (int32 sec, uint32 nanosec).
+    struct Time {
+        long          sec;
+        unsigned long nanosec;
     };
 
-    // Planner -> peers (rt/kist/nav/status): the controller's current navigation state,
-    // published continuously at a low rate (+ immediately on change) so an orchestrator /
-    // LLM can close the run-to-completion loop. ARRIVED is DEBOUNCED — it is only reported
-    // after the robot holds at the goal (aligned + at standoff) for arrival_hold_s, so a
-    // one-frame flicker never falsely signals arrival. It stays ARRIVED until a new goal.
-    //   state: 0 IDLE (no goal), 1 DRIVING, 2 ALIGNING, 3 APPROACHING, 4 ARRIVED, 5 BLOCKED,
-    //          6 NO_ROUTE (goal set but no path to it — unreachable / not planned yet).
-    struct NavStatus {
-        unsigned long long seq;
-        long long          stamp_ns;
-        string             name;     // active goal name; "" = idle (no goal)
-        octet              state;    // see the enumeration above
+    // std_msgs/Header (stamp + frame_id).
+    struct Header {
+        Time   stamp;
+        string frame_id;
+    };
+
+    // Orchestrator -> module (rt/cortex/nav/cmd): one subtask of a plan. nav handles action
+    // "move_to" only (VLA handles open/pick/place/handover/...); other actions are ignored here.
+    struct SubtaskCmd {
+        string           plan_id;      // plan id, e.g. "p-1758351012-0007"
+        unsigned short   index;        // subtask index within the plan (from 0)
+        string           action;       // semantic action; nav uses "move_to"
+        sequence<string> args;         // validated vocabulary args; move_to -> ["fridge"]
+        string           instruction;  // VLA-only English instruction; empty for nav
+        boolean          cancel;       // true = cancel (plan_id, index); action/args ignored
+    };
+
+    // Module -> orchestrator (rt/cortex/nav/state), 10 Hz. Reports the subtask being executed.
+    //   status: 0 IDLE (no subtask), 1 RUNNING, 2 DONE, 3 FAILED.
+    //   progress: 0..1 (nav: 1 - remaining/initial distance). note: human-readable
+    //   ("" normal; "cancelled"; "no path"/"unsupported: ..." on FAILED — see the contract).
+    struct SubtaskState {
+        Header         header;         // header.stamp = publish time (freshness / stale check)
+        string         plan_id;        // reported plan; "" when IDLE
+        unsigned short index;          // reported subtask index; 0 when IDLE
+        string         action;         // reported action (as received)
+        octet          status;         // see the enumeration above
+        float          progress;       // 0..1 (debug)
+        string         note;           // human-readable detail
     };
 
 };
