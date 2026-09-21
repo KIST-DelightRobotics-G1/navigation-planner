@@ -130,13 +130,19 @@ enabled** (see that repo) — nav being "up" is not enough on its own.
 
 Command a destination and watch the result — the cortex orchestrator contract
 (`SubtaskCmd` in on `rt/cortex/nav/cmd`; `SubtaskState` out on `rt/cortex/nav/state`
-at 10 Hz: `IDLE / RUNNING / DONE / FAILED` + progress + note). Without the
-orchestrator, drive it from the test tools:
+at 10 Hz: `IDLE / RUNNING / DONE / FAILED` + progress + note).
+
+The test tools take an optional config path (default `config/config.yaml`).
+Without the orchestrator, drive the contract by hand:
 
 ```bash
-./build/test_subtask_state_sub            # watch rt/cortex/nav/state
+# command side — publish a subtask (rt/cortex/nav/cmd)
 ./build/test_subtask_cmd_send fridge      # move_to a named destination
 ./build/test_subtask_cmd_send --cancel    # cancel the current subtask
+
+# state side — subscribe
+./build/test_subtask_state_sub            # prints rt/cortex/nav/state (IDLE/RUNNING/DONE/FAILED)
+./build/test_goal_recv                    # prints each command resolved to a Goal (debug)
 ```
 
 An ad-hoc goal from rviz ("2D Goal Pose", odom frame) also works for quick tests.
