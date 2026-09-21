@@ -42,3 +42,9 @@ localization:
                          # 0.30 accepts ~0.4m locks, 0.05 ~ RMS 0.22m — tighten for meaningful locks
   max_jump_m: 1.0        # reject a correction translating map->odom more than this (m)
   max_yaw_deg: 30        # reject a solution >this many deg from the seed heading (kills 180deg flips)
+
+# Navigation runtime toggles (moved off env vars; edit here + restart).
+navigation:
+  drive: false    # false = preview (no Twist published; robot will NOT move).
+                  # true  = arm the Twist output on rt/kist/nav/cmd_vel -> gearsonic. THE ROBOT MOVES.
+  survey: false   # true = print the robot's MAP-frame pose each cycle (for surveying destinations).

@@ -22,11 +22,11 @@ double yaw_of(const Eigen::Quaterniond& q) {
 void VizWorker::start(DataBuffer<ObstacleGrid>& grid_buf, DataBuffer<Costmap>& costmap_buf,
                       DataBuffer<Path>& path_buf, ObstacleGridPublisher& pub, ObstacleGridConfig gcfg,
                       LioTransformProducer& prod, LioReceiver& rx, DataBuffer<MapOdom>& mapodom,
-                      std::vector<float> prior_map_xyz) {
+                      bool survey, std::vector<float> prior_map_xyz) {
     grid_buf_ = &grid_buf; costmap_buf_ = &costmap_buf; path_buf_ = &path_buf; pub_ = &pub;
     gcfg_ = gcfg; prod_ = &prod; rx_ = &rx; mapodom_ = &mapodom;
     prior_map_xyz_ = std::move(prior_map_xyz);
-    survey_ = [] { const char* v = std::getenv("NAV_SURVEY"); return v && v[0] == '1'; }();
+    survey_ = survey;
     running_ = true;
     thread_ = std::thread(&VizWorker::run, this);
 }
@@ -69,7 +69,7 @@ void VizWorker::run() {
                 pub_->publish_cloud(out);
             }
         }
-        // Survey (NAV_SURVEY=1): print the robot's MAP-frame pose so you can drive it to a spot
+        // Survey (navigation.survey): print the robot's MAP-frame pose so you can drive it to a spot
         // (e.g. in front of the fridge) and read the x/y/yaw to paste into destinations.yaml.
         if (survey_) {
             const auto now = std::chrono::steady_clock::now();

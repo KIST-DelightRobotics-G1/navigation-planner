@@ -62,8 +62,12 @@ bool NavSystem::start(const std::string& config_path) {
     // reported FAILED "no path" (default 4.0 s; env-tunable) so a brief replan gap never aborts a run.
     double nopath_hold_s = 4.0;
     if (const char* v = std::getenv("NAV_NOPATH_HOLD")) nopath_hold_s = std::atof(v);
-    // Driving is opt-in: only NAV_DRIVE=1 arms the Twist output. Default = preview (no motion).
-    const bool drive_enabled = [] { const char* v = std::getenv("NAV_DRIVE"); return v && v[0] == '1'; }();
+    // Runtime toggles from config (navigation:). Driving is opt-in: default = preview (no motion).
+    bool drive_enabled = false, survey = false;
+    if (const auto nav = root["navigation"]) {
+        drive_enabled = nav["drive"].as<bool>(false);
+        survey        = nav["survey"].as<bool>(false);
+    }
 
     // UWB (localization seed only). Non-fatal: no UWB -> the config fixed seed is used.
     if (uwb_.start(domain)) uwb_started_ = true;
@@ -115,13 +119,13 @@ bool NavSystem::start(const std::string& config_path) {
     ctrl_.start(path_buf_, prod_, costmap_buf_, goal_src_, cmd_buf_, cmd_pub_, status_pub_,
                 drive_enabled, fc, arrival_hold_s, nopath_hold_s);
     viz_.start(grid_buf_, costmap_buf_, path_buf_, pub_, perc_.gcfg(), prod_, rx_, mapodom_buf_,
-               loc_.prior_xyz());   // prior map (map frame) for the rt/prior_map global-frame overlay
+               survey, loc_.prior_xyz());   // prior map (map frame) for the rt/prior_map global-frame overlay
 
     std::cout << "[NavSystem] up: perception + planning + controller + viz (domain " << domain << ").\n";
     if (drive_enabled)
-        std::cout << "  *** NAV_DRIVE=1 — Twist IS published: THE ROBOT WILL MOVE. estop ready. ***\n";
+        std::cout << "  *** navigation.drive: true — Twist IS published: THE ROBOT WILL MOVE. estop ready. ***\n";
     else
-        std::cout << "  controller PREVIEW only (no Twist, robot will NOT move). Set NAV_DRIVE=1 to drive.\n";
+        std::cout << "  controller PREVIEW only (no Twist, robot will NOT move). Set navigation.drive: true to drive.\n";
     std::cout << "  goal: rviz 2D Goal Pose (ad-hoc), or a SubtaskCmd move_to on rt/cortex/nav/cmd "
                  "(catalog: config/destinations.yaml). state on rt/cortex/nav/state. Ctrl+C to quit.\n";
     return true;

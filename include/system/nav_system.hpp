@@ -8,7 +8,7 @@
 //
 //   perception : scan + pose      -> ObstacleMapper  -> grid + costmap buffers
 //   planner    : costmap + goal   -> RoutePlanner    -> path buffer
-//   controller : path+pose+cm+goal -> LocalController -> NavCommand (-> Twist if NAV_DRIVE=1)
+//   controller : path+pose+cm+goal -> LocalController -> NavCommand (-> Twist if navigation.drive)
 //   viz        : buffers          -> rviz
 
 #include "common/data_buffer.hpp"

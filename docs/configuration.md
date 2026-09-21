@@ -31,6 +31,15 @@ disables localization (rviz odom goals still work).
 | `max_jump_m` | `1.0` | Reject a correction translating `map→odom` more than this (m). |
 | `max_yaw_deg` | `30` | Reject a solution more than this many degrees from the seed heading (kills 180° flips). |
 
+### `navigation`
+
+Runtime toggles (restart to apply).
+
+| Key | Default | Meaning |
+|---|---|---|
+| `drive` | `false` | `false` = preview (no Twist; robot will NOT move). `true` = arm the Twist output on `rt/kist/nav/cmd_vel` → gearsonic. **The robot moves.** |
+| `survey` | `false` | `true` = print the robot's MAP-frame pose each cycle, to survey a spot's `x/y/yaw` for `destinations.yaml`. |
+
 ## `config/cyclonedds.xml`
 
 The DDS transport. Edit this to select the **network interface** (the robot LAN
@@ -72,7 +81,6 @@ Read at launch (no rebuild):
 
 | Variable | Applies to | Meaning |
 |---|---|---|
-| `NAV_DRIVE=1` | `kist-navigation-planner` | Arm the Twist output on `rt/kist/nav/cmd_vel` — **the robot moves**. Unset = preview only. |
 | `NAV_VMAX` | `kist-navigation-planner` | Follower cruise speed (m/s). |
 | `NAV_ARRIVAL_HOLD` | `kist-navigation-planner` | Arrival debounce (s): hold at the goal this long before reporting `DONE` (default 1.0). |
 | `NAV_NOPATH_HOLD` | `kist-navigation-planner` | No-path debounce (s): a transient no-path stays `RUNNING`; only a sustained one this long → `FAILED` "no path" (default 4.0). |

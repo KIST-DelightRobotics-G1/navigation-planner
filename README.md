@@ -114,15 +114,14 @@ Everything below runs inside the container (`./docker/run.sh`); the LIO engine i
 baked into the same image. A new space needs a prior map first — record one with
 `./build/kist-map-recorder` (see Installation step 5).
 
-**`NAV_DRIVE=1` MOVES THE ROBOT** — clear the area and keep gearsonic's e-stop in reach.
+**`navigation.drive: true` MOVES THE ROBOT** — clear the area and keep gearsonic's e-stop in reach.
 
 ```bash
 # 1. LIO engine — localization input (/Odometry_loc + /cloud_registered_1)
-run_lio_daemon                                    # start, detached (stop_lio_daemon to stop; tail -f /tmp/lio_engine.log)
+run_lio_daemon                            # start, detached (stop_lio_daemon to stop; tail -f /tmp/lio_engine.log)
 
-# 2. navigation planner
-./build/kist-navigation-planner           # preview: no Twist, robot will NOT move (verify the lock)
-NAV_DRIVE=1 ./build/kist-navigation-planner   # drive: arms the Twist output — THE ROBOT WILL MOVE
+# 2. navigation planner (preview by default; set navigation.drive: true in config.yaml to move)
+./build/kist-navigation-planner
 ```
 
 The planner publishes a `Twist` on `rt/kist/nav/cmd_vel`, but the robot only moves
