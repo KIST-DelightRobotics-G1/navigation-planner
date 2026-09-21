@@ -19,14 +19,17 @@ struct Pose2D {
     float x = 0.f, y = 0.f, yaw = 0.f;   // odom
 };
 
-// Follower phase (status/telemetry, not control).
-enum class FollowPhase { Driving, Aligning, Approaching, Arrived, Blocked };
+// Follower phase (status/telemetry, not control). NoPath = a goal is set but there is no route to
+// follow AND the robot is not at the goal (unreachable / not planned yet) — distinct from Arrived,
+// which the no-route case would otherwise masquerade as. Idle = no active goal.
+enum class FollowPhase { Driving, Aligning, Approaching, Arrived, Blocked, NoPath, Idle };
 
 // Published navigation state (rt/kist/nav/status wire codes — keep in sync with the NavStatus
 // enumeration in idl/kist_nav.idl). Idle = no active goal; Arrived is the DEBOUNCED confirmation
-// (the controller worker only emits it after the robot holds at the goal for arrival_hold_s).
+// (the controller worker only emits it after the robot holds at the goal for arrival_hold_s);
+// NoRoute = goal set but no path to it.
 enum class NavState : uint8_t {
-    Idle = 0, Driving = 1, Aligning = 2, Approaching = 3, Arrived = 4, Blocked = 5
+    Idle = 0, Driving = 1, Aligning = 2, Approaching = 3, Arrived = 4, Blocked = 5, NoRoute = 6
 };
 
 // Per-destination terminal (dock) behavior: what the follower does once it reaches the goal.

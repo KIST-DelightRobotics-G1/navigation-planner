@@ -28,6 +28,7 @@ static const char* state_name(uint8_t s) {
         case 3: return "APPROACHING";
         case 4: return "ARRIVED";
         case 5: return "BLOCKED";
+        case 6: return "NO_ROUTE";
         default: return "?";
     }
 }

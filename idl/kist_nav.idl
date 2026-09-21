@@ -42,7 +42,8 @@ module kist_msgs {
     // LLM can close the run-to-completion loop. ARRIVED is DEBOUNCED — it is only reported
     // after the robot holds at the goal (aligned + at standoff) for arrival_hold_s, so a
     // one-frame flicker never falsely signals arrival. It stays ARRIVED until a new goal.
-    //   state: 0 IDLE (no goal), 1 DRIVING, 2 ALIGNING, 3 APPROACHING, 4 ARRIVED, 5 BLOCKED.
+    //   state: 0 IDLE (no goal), 1 DRIVING, 2 ALIGNING, 3 APPROACHING, 4 ARRIVED, 5 BLOCKED,
+    //          6 NO_ROUTE (goal set but no path to it — unreachable / not planned yet).
     struct NavStatus {
         unsigned long long seq;
         long long          stamp_ns;

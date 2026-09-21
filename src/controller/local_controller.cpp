@@ -16,15 +16,31 @@ NavCommand LocalController::step(const Path* path, const RobotTransforms* tf, co
     auto set_phase = [&](FollowPhase p) { if (phase) *phase = p; };
     NavCommand cmd;   // zeros = stop (default/safe)
 
-    if (!path || path->waypoints.empty() || !tf) { set_phase(FollowPhase::Arrived); return cmd; }
+    const bool has_goal = goal && goal->valid;
+
+    if (!tf) {   // no pose -> cannot follow a path or judge arrival
+        set_phase(has_goal ? FollowPhase::NoPath : FollowPhase::Idle);
+        return cmd;
+    }
 
     const Pose2D pose{ float(tf->T_odom_pelvis.translation.x()),
                        float(tf->T_odom_pelvis.translation.y()),
                        float(quat_yaw(tf->T_odom_pelvis.rotation)) };
 
+    if (!path || path->waypoints.empty()) {          // nothing to follow
+        if (!has_goal) { set_phase(FollowPhase::Idle); return cmd; }
+        // Goal set but no route: this is ARRIVAL only if we are actually at the goal (the same
+        // arrival_tol the follower latches on — planner returns an empty path once start==goal
+        // cell); otherwise there is genuinely NO PATH (unreachable / not planned yet).
+        const float d = std::hypot(goal->x - pose.x, goal->y - pose.y);
+        set_phase(d <= follower_.config().arrival_tol_m ? FollowPhase::Arrived
+                                                        : FollowPhase::NoPath);
+        return cmd;
+    }
+
     float      goal_yaw = std::numeric_limits<float>::quiet_NaN();
     DockConfig dock;                                 // default = off (ad-hoc / no goal)
-    if (goal && goal->valid) {
+    if (has_goal) {
         dock = goal->dock;
         if (goal->has_yaw) goal_yaw = goal->yaw;     // NaN otherwise -> align skipped
     }

@@ -37,10 +37,11 @@ NavState ControllerWorker::resolve_state(bool have_goal, const std::string& name
         }
         arrival_hold_ = 0.0;
         switch (phase) {
-            case FollowPhase::Blocked:  return NavState::Blocked;
-            case FollowPhase::Aligning: return NavState::Aligning;
-            default:                    return phase == FollowPhase::Approaching ? NavState::Approaching
-                                                                                 : NavState::Driving;
+            case FollowPhase::Blocked:     return NavState::Blocked;
+            case FollowPhase::Aligning:    return NavState::Aligning;
+            case FollowPhase::Approaching: return NavState::Approaching;
+            case FollowPhase::NoPath:      return NavState::NoRoute;   // goal set, no route to it
+            default:                       return NavState::Driving;   // Driving (+ unexpected Idle)
         }
     }
     // No live goal: either we consumed it on arrival (hold ARRIVED), or genuinely idle.
@@ -96,7 +97,9 @@ void ControllerWorker::run() {
             const char* ps = phase == FollowPhase::Blocked     ? "BLOCKED"
                            : phase == FollowPhase::Aligning    ? "align"
                            : phase == FollowPhase::Approaching ? "approach"
-                           : phase == FollowPhase::Arrived     ? "arrived" : "drive";
+                           : phase == FollowPhase::Arrived     ? "arrived"
+                           : phase == FollowPhase::NoPath      ? "no-path"
+                           : phase == FollowPhase::Idle        ? "idle" : "drive";
             std::printf("[controller] vx=% .2f vy=% .2f vyaw=% .2f  %-7s  %s\n",
                         cmd.vx, cmd.vy, cmd.vyaw, ps, drive_enabled_ ? "SENT" : "(preview)");
         }
