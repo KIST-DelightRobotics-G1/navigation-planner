@@ -16,7 +16,7 @@ C++ autonomous navigation planner for the Unitree G1 humanoid robot (ROS-free, D
 | Eigen3 | distro | linear algebra (transforms, EKF) |
 | `yaml-cpp` | distro | config parsing |
 | FAST-LIO localization engine | deepglint (external) | LiDAR odometry + registered cloud over DDS ([docs/LIO_ENGINE.md](docs/LIO_ENGINE.md)) |
-| Prior map | recorded | `maps/map.pcd` + `maps/map.uwb` (from `kist-map-recorder`) |
+| Prior map | HF dataset | `maps/map.pcd` + `maps/map.uwb` — baked from [`Hanyu462/kist-g1-nav-map`](https://huggingface.co/datasets/Hanyu462/kist-g1-nav-map) (or record your own with `kist-map-recorder`) |
 
 ## Installation
 
@@ -31,8 +31,8 @@ All following steps run from the repository root.
 
 #### Quick Start with Docker
 
-The image bakes in everything — SDKs, toolchain, build. `build.sh` picks the
-Dockerfile for your architecture (x86 / Jetson).
+The image bakes in everything — SDKs, toolchain, build, LIO engine, and the prior
+map (pulled from the Hugging Face dataset at build time).
 
 ```bash
 ./docker/build.sh      # build the image
@@ -40,8 +40,7 @@ Dockerfile for your architecture (x86 / Jetson).
 ```
 
 This is the whole setup; the numbered steps 2–5 below are the manual
-(non-Docker) alternative. The prior map is a runtime artifact you provide — see
-step 5.
+(non-Docker) alternative.
 
 #### 2. Install unitree_sdk2
 
@@ -84,13 +83,17 @@ The planner does not run SLAM itself — it consumes an **external FAST-LIO
 localization service** over DDS (odometry on `/Odometry_loc`, registered cloud on
 `/cloud_registered_1`). Set it up per [docs/LIO_ENGINE.md](docs/LIO_ENGINE.md).
 
-Localization needs a **prior map** of the environment. Record one with the
-included tool (drive/carry the robot around the space, Ctrl+C to save), or drop an
-existing pair in place:
+Localization needs a **prior map** of the environment. The Docker image already
+bakes one from the [`Hanyu462/kist-g1-nav-map`](https://huggingface.co/datasets/Hanyu462/kist-g1-nav-map)
+dataset. For a manual build, or to make a map of a new space, record one with the
+included tool (drive/carry the robot around the space, Ctrl+C to save):
 
 ```bash
 ./build/kist-map-recorder            # writes maps/map.pcd (+ maps/map.uwb sidecar)
 ```
+
+A new map is deployed by uploading the pair to the dataset and bumping the file
+version in `docker/Dockerfile`.
 
 ## Build
 
@@ -110,9 +113,9 @@ Set up the config once before running:
 - `config/destinations.yaml` — named destination catalog + per-destination dock.
 - All keys: [docs/configuration.md](docs/configuration.md).
 
-Everything below runs inside the container (`./docker/run.sh`); the LIO engine is
-baked into the same image. A new space needs a prior map first — record one with
-`./build/kist-map-recorder` (see Installation step 5).
+Everything below runs inside the container (`./docker/run.sh`); the LIO engine and
+a prior map are baked into the same image. Mapping a new space needs a new prior
+map — see Installation step 5.
 
 **`navigation.drive: true` MOVES THE ROBOT** — clear the area and keep gearsonic's e-stop in reach.
 

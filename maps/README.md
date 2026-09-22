@@ -5,6 +5,11 @@ The localization stack relocalizes the live LIO odom against a **prior PCD map**
 environment-specific, multi-MB artifact, so it is **gitignored** (`*.pcd`, `*.uwb`) and lives
 here per machine, not in the repo history.
 
+The Docker image bakes the deployed map from the public HF dataset
+[`Hanyu462/kist-g1-nav-map`](https://huggingface.co/datasets/Hanyu462/kist-g1-nav-map)
+(`docker/Dockerfile`). To deploy a new map: record it (below), upload the `.pcd` + `.uwb`
+pair to the dataset, and bump the file version in the Dockerfile.
+
 ## Canonical prior map
 ```
 maps/map.pcd     # the prior point cloud

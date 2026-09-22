@@ -81,6 +81,13 @@ ENV CYCLONEDDS_URI=file:///workspace/kist-navigation-planner/config/cyclonedds.x
 COPY . .
 RUN cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j"$(nproc)"
 
+# ─── prior map (public HF dataset) ────────────────────────────────────────────
+# The relocalizer reads maps/map.pcd (+ the map.uwb sidecar) at startup. Baked in
+# from the versioned Hugging Face dataset; bump the file version to change the map.
+RUN mkdir -p maps && \
+    wget -q -O maps/map.pcd https://huggingface.co/datasets/Hanyu462/kist-g1-nav-map/resolve/main/map_v0.1.0.pcd && \
+    wget -q -O maps/map.uwb https://huggingface.co/datasets/Hanyu462/kist-g1-nav-map/resolve/main/map_v0.1.0.uwb
+
 # Register Livox-SDK2's shared lib (installed to /usr/local/lib) with the dynamic
 # loader — without this the driver dies at runtime: "cannot open shared object file:
 # liblivox_lidar_sdk_shared.so". (Late layer so it does not invalidate the SDK build.)
