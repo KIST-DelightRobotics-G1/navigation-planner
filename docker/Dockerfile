@@ -17,7 +17,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # ─── build tools + deps (planner: yaml-cpp/eigen; engine: pcl + ros pcl_ros) ───
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential cmake git ca-certificates \
+    build-essential cmake git ca-certificates wget \
     libyaml-cpp-dev libeigen3-dev \
     libpcl-dev ros-humble-pcl-ros \
     ros-humble-rviz2 \
