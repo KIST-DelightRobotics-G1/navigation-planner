@@ -1,6 +1,6 @@
 #pragma once
 
-// SubtaskStatePublisher — publishes the controller's subtask state as a kist_msgs::SubtaskState on
+// SubtaskStatePublisher — publishes the controller's subtask state as a cortex_msgs::msg::dds_::SubtaskState_ on
 // rt/cortex/nav/state (ROS2 topic /cortex/nav/state), RELIABLE, at 10 Hz. This is the back-channel
 // that closes the orchestrator's run-to-completion loop opened by SubtaskCmd on /cortex/nav/cmd.
 // Passive (driven by the controller loop; no own thread); mirrors NavCommandPublisher's PIMPL so
@@ -33,14 +33,14 @@ public:
     // Publish one SubtaskState (header.stamp = now). plan_id/index/action echo the reported subtask
     // ("" / 0 / "" when idle); progress is 0..1; note is human-readable ("" when nothing to add).
     void publish(const std::string& plan_id, uint16_t index, const std::string& action,
-                 SubtaskStatus status, float progress, const std::string& note);
+                 SubtaskStatus status, float progress, const std::string& detail);
     void stop();
 
     SubtaskStatePublisher(const SubtaskStatePublisher&) = delete;
     SubtaskStatePublisher& operator=(const SubtaskStatePublisher&) = delete;
 
 private:
-    using Pub = unitree::robot::ChannelPublisher<kist_msgs::SubtaskState>;
+    using Pub = unitree::robot::ChannelPublisher<cortex_msgs::msg::dds_::SubtaskState_>;
     std::unique_ptr<Pub> pub_;
 };
 

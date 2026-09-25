@@ -32,11 +32,11 @@ int main(int argc, char** argv) {
     if (!kist::apply_dds_config(root)) return 1;
 
     unitree::robot::ChannelFactory::Instance()->Init(domain, "");
-    using Pub = unitree::robot::ChannelPublisher<kist_msgs::SubtaskCmd>;
+    using Pub = unitree::robot::ChannelPublisher<cortex_msgs::msg::dds_::SubtaskCmd_>;
     Pub pub(kist::kNavCmdTopic);
     pub.InitChannel();
 
-    kist_msgs::SubtaskCmd msg;
+    cortex_msgs::msg::dds_::SubtaskCmd_ msg;
     msg.plan_id(plan_id);
     msg.index(index);
     msg.action(cancel ? "" : "move_to");

@@ -6,7 +6,7 @@
 #include "common/config.hpp"
 #include "common/dds_config.hpp"
 
-#include <kist_nav.hpp>                              // kist_msgs::SubtaskState
+#include <kist_nav.hpp>                              // cortex_msgs::msg::dds_::SubtaskState_
 
 #include <unitree/robot/channel/channel_factory.hpp>
 #include <unitree/robot/channel/channel_subscriber.hpp>
@@ -43,15 +43,15 @@ int main(int argc, char** argv) {
     unitree::robot::ChannelFactory::Instance()->Init(domain, "");
 
     uint8_t last = 255;   // 10 Hz stream -> only print on a status transition
-    using Sub = unitree::robot::ChannelSubscriber<kist_msgs::SubtaskState>;
+    using Sub = unitree::robot::ChannelSubscriber<cortex_msgs::msg::dds_::SubtaskState_>;
     Sub sub(kist::kNavStateTopic);
     sub.InitChannel([&last](const void* m) {
-        const auto& msg = *static_cast<const kist_msgs::SubtaskState*>(m);
+        const auto& msg = *static_cast<const cortex_msgs::msg::dds_::SubtaskState_*>(m);
         const uint8_t s = msg.status();
         if (s == last) return;                       // suppress the steady 10 Hz repeats
         std::printf("[nav-state] %-7s plan='%s' idx=%u action='%s' prog=%.2f note='%s'\n",
                     status_name(s), msg.plan_id().c_str(), msg.index(), msg.action().c_str(),
-                    msg.progress(), msg.note().c_str());
+                    msg.progress(), msg.detail().c_str());
         last = s;
     }, 10);
 

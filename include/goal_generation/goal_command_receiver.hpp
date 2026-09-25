@@ -12,7 +12,7 @@
 #include "common/data_buffer.hpp"
 #include "goal_generation/goal.hpp"
 
-#include <kist_nav.hpp>   // generated: kist_msgs::SubtaskCmd
+#include <kist_nav.hpp>   // generated: cortex_msgs::msg::dds_::SubtaskCmd_
 
 #include <map>
 #include <string>
@@ -43,7 +43,7 @@ private:
     void on_command(const void* message);
     bool load(const std::string& yaml_path);
 
-    using Sub = unitree::robot::ChannelSubscriber<kist_msgs::SubtaskCmd>;
+    using Sub = unitree::robot::ChannelSubscriber<cortex_msgs::msg::dds_::SubtaskCmd_>;
     std::shared_ptr<Sub>        sub_;
     std::map<std::string, Goal> catalog_;   // name -> Goal (yaw in rad, valid=true)
     DataBuffer<Goal>            goal_buf_;
