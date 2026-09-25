@@ -1,20 +1,34 @@
 // Navigation DDS contract for kist-navigation-planner. Follows the kist ecosystem
-// conventions (module kist_msgs, seq / stamp_ns fields, CycloneDDS idlc `-l cxx`
-// codegen). Distinct file name (kist_nav.idl -> kist_nav.hpp) so the generated
-// header never collides with other repos' kist_msgs.hpp, while the C++ namespace
-// stays kist_msgs:: for cross-repo interop.
+// conventions (seq / stamp_ns fields, CycloneDDS idlc `-l cxx` codegen). Distinct
+// file name (kist_nav.idl -> kist_nav.hpp) so the generated header never collides
+// with other repos' headers.
+//
+// Two modules live here, and the split is deliberate:
+//
+//   kist_msgs    nav's own types. The destination catalog is published by this
+//                planner and read by its own tools, so it keeps the local name.
+//
+//   cortex_msgs::msg::dds_
+//                the orchestrator's contract. The orchestrator is a ROS 2 node,
+//                and ROS 2 mangles both names it puts on the wire:
+//
+//                    ROS 2 type   cortex_msgs/msg/SubtaskCmd
+//                    DDS type     cortex_msgs::msg::dds_::SubtaskCmd_
+//                    ROS 2 topic  /cortex/nav/cmd
+//                    DDS topic    rt/cortex/nav/cmd
+//
+//                DDS matches endpoints on (topic name, type name) together, so
+//                the module nesting and the trailing underscore are not style —
+//                without them the two sides never see each other. Same reason the
+//                other ROS types in this repo appear as sensor_msgs::msg::dds_::
+//                PointCloud2_, nav_msgs::msg::dds_::Odometry_ and so on.
 //
 // Topics:
 //   "rt/kist/nav/destinations"  NavDestinationList  — this planner PUBLISHES the
 //       destination catalog (config/destinations.yaml) so any peer can address a
 //       goal by name. Re-published at a low rate for late joiners.
-//   "rt/cortex/nav/cmd"    SubtaskCmd    — orchestrator -> nav (RELIABLE, depth 10, event).
-//   "rt/cortex/nav/state"  SubtaskState  — nav -> orchestrator (RELIABLE, depth 10, 10 Hz).
-//     ("rt/" is the ROS2 topic prefix: ROS2 topic /cortex/nav/cmd == DDS topic rt/cortex/nav/cmd.)
-//
-// NOTE (ROS2 interop): the orchestrator is ROS2. Header/Time below mirror std_msgs/Header +
-// builtin_interfaces/Time by structure. If strict rmw type-name matching is required, align the
-// module/type names to the orchestrator's package when their .msg is shared.
+//   "rt/cortex/nav/cmd"    SubtaskCmd_    — orchestrator -> nav (RELIABLE, depth 10, event).
+//   "rt/cortex/nav/state"  SubtaskState_  — nav -> orchestrator (RELIABLE, depth 10, 10 Hz).
 
 module kist_msgs {
 
@@ -35,22 +49,20 @@ module kist_msgs {
         sequence<NavDestination>  destinations;
     };
 
-    // ── cortex orchestrator contract (shared with the VLA module) ─────────────────
-    // builtin_interfaces/Time (int32 sec, uint32 nanosec).
-    struct Time {
-        long          sec;
-        unsigned long nanosec;
-    };
+};
 
-    // std_msgs/Header (stamp + frame_id).
-    struct Header {
-        Time   stamp;
-        string frame_id;
-    };
+// ── cortex orchestrator contract (shared with the VLA module) ─────────────────
+// Field layout must stay identical to cortex's cortex_msgs/msg/*.msg and to
+// vla-inference's idl/cortex_subtask.idl. Adding a field to one without the
+// others silently breaks the match.
+module cortex_msgs {
+module msg {
+module dds_ {
 
-    // Orchestrator -> module (rt/cortex/nav/cmd): one subtask of a plan. nav handles action
-    // "move_to" only (VLA handles open/pick/place/handover/...); other actions are ignored here.
-    struct SubtaskCmd {
+    // Orchestrator -> module (rt/cortex/nav/cmd): one subtask of a plan. nav handles
+    // action "move_to" only (VLA handles open/pick/place/handover/...); other actions
+    // are reported FAILED "unsupported: ...".
+    struct SubtaskCmd_ {
         string           plan_id;      // plan id, e.g. "p-1758351012-0007"
         unsigned short   index;        // subtask index within the plan (from 0)
         string           action;       // semantic action; nav uses "move_to"
@@ -59,18 +71,20 @@ module kist_msgs {
         boolean          cancel;       // true = cancel (plan_id, index); action/args ignored
     };
 
-    // Module -> orchestrator (rt/cortex/nav/state), 10 Hz. Reports the subtask being executed.
+    // Module -> orchestrator (rt/cortex/nav/state), 10 Hz.
     //   status: 0 IDLE (no subtask), 1 RUNNING, 2 DONE, 3 FAILED.
-    //   progress: 0..1 (nav: 1 - remaining/initial distance). note: human-readable
-    //   ("" normal; "cancelled"; "no path"/"unsupported: ..." on FAILED — see the contract).
-    struct SubtaskState {
-        Header         header;         // header.stamp = publish time (freshness / stale check)
-        string         plan_id;        // reported plan; "" when IDLE
-        unsigned short index;          // reported subtask index; 0 when IDLE
-        string         action;         // reported action (as received)
-        octet          status;         // see the enumeration above
-        float          progress;       // 0..1 (debug)
-        string         note;           // human-readable detail
+    //   progress: 0..1 (nav: 1 - remaining/initial distance). detail: human-readable
+    //   ("" normal; "cancelled"; "no path"/"unsupported: ..." on FAILED).
+    struct SubtaskState_ {
+        long long      stamp_ns;      // publish clock (epoch ns) — freshness / stale check
+        string         plan_id;       // reported plan; "" when IDLE
+        unsigned short index;         // reported subtask index; 0 when IDLE
+        string         action;        // reported action (as received)
+        octet          status;        // see the enumeration above
+        float          progress;      // 0..1 (debug)
+        string         detail;        // human-readable detail
     };
 
+};
+};
 };

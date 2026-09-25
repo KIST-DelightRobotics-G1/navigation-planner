@@ -68,7 +68,7 @@ void GoalCommandReceiver::stop() {
 }
 
 void GoalCommandReceiver::on_command(const void* message) {
-    const auto& msg = *static_cast<const kist_msgs::SubtaskCmd*>(message);
+    const auto& msg = *static_cast<const cortex_msgs::msg::dds_::SubtaskCmd_*>(message);
     const std::string plan_id = msg.plan_id();
     const uint16_t    index   = msg.index();
     const std::string action  = msg.action();

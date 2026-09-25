@@ -133,7 +133,13 @@ enabled** (see that repo) — nav being "up" is not enough on its own.
 
 Command a destination and watch the result — the cortex orchestrator contract
 (`SubtaskCmd` in on `rt/cortex/nav/cmd`; `SubtaskState` out on `rt/cortex/nav/state`
-at 10 Hz: `IDLE / RUNNING / DONE / FAILED` + progress + note).
+at 10 Hz: `IDLE / RUNNING / DONE / FAILED` + progress + detail).
+
+The orchestrator is a ROS 2 node, so the DDS type names it advertises are the
+mangled ones — `cortex_msgs::msg::dds_::SubtaskCmd_` and `…::SubtaskState_`, which
+is what `idl/kist_nav.idl` declares. DDS matches endpoints on (topic name, type
+name) together: get either wrong and the two sides simply never see each other,
+with no error anywhere.
 
 The test tools take an optional config path (default `config/config.yaml`).
 Without the orchestrator, drive the contract by hand:
