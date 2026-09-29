@@ -45,4 +45,4 @@ destinations:
     yaw_deg: -19.7        # arrival heading (robot faced the fridge)
     align: true           # turn to face the fridge
     approach: true        # then creep up to it — this sets the final stop distance
-    standoff_m: 0.22      # stop 0.19 m from the (inflated) fridge — tuned on the real G1
+    standoff_m: 0.25      # stop 0.25 m from the (inflated) fridge — tuned on the real G1
