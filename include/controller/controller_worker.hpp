@@ -40,17 +40,18 @@ public:
 private:
     void run();
 
-    // What to report on rt/cortex/nav/state this cycle.
+    // What to report on rt/cortex/nav/state this tick.
     struct SubtaskReport {
         SubtaskStatus status  = SubtaskStatus::Idle;
         float         progress = 0.0f;   // 0..1
-        std::string   note;              // "", "cancelled", "no path", "unsupported: ..."
+        std::string   detail;            // "", "cancelled", "no path", "unsupported: ..."
         std::string   plan_id;           // "" when idle
         uint16_t      index  = 0;
         std::string   action;            // "" when idle
     };
-    // Fold the follower phase + goal (+ robot pose for progress) into a SubtaskReport, debouncing
-    // arrival (must hold arrival_hold_s -> DONE) and consuming the goal on the confirmed edge.
+    // The status FSM, called once per publish (10 Hz). Debounces arrival (-> DONE) and no-path
+    // (-> FAILED), then emits the terminal verdict for exactly 3 publishes before returning to IDLE
+    // (cortex contract). Consumes the goal when a subtask terminates. `dt` = s since the last call.
     SubtaskReport step_status(const std::optional<Goal>& goal, const RobotTransforms* rt,
                               FollowPhase phase, double dt);
 
@@ -67,15 +68,24 @@ private:
     double                   nopath_hold_s_  = 4.0;
 
     // Subtask / arrival state machine (see step_status).
-    double      arrival_hold_ = 0.0;      // accumulated time in phase Arrived (s)
-    double      nopath_hold_  = 0.0;      // accumulated time in phase NoPath (s) -> FAILED when sustained
-    bool        holding_      = false;    // arrived + consumed -> report DONE until a new subtask
+    double      arrival_hold_ = 0.0;      // accumulated time in phase Arrived (s) -> DONE when held
+    double      nopath_hold_  = 0.0;      // accumulated time in phase NoPath  (s) -> FAILED when held
     std::string cur_plan_;                // subtask being tracked (for change detection / progress)
     uint16_t    cur_index_ = 0;
     bool        have_cur_   = false;
     float       initial_dist_ = 0.0f;     // robot->goal distance captured at subtask start (progress)
-    std::string arr_plan_, arr_action_;   // subtask reported while holding_ (the one we reached)
-    uint16_t    arr_index_ = 0;
+
+    // Terminal burst: DONE/FAILED is emitted for exactly 3 publishes, then IDLE.
+    bool          term_active_ = false;
+    int           term_count_  = 0;
+    SubtaskStatus term_status_ = SubtaskStatus::Idle;
+    std::string   term_plan_, term_action_, term_detail_;
+    uint16_t      term_index_    = 0;
+    float         term_progress_ = 0.0f;
+    // The subtask whose terminal burst has completed — suppresses re-reporting a lingering verdict.
+    std::string   closed_plan_;
+    uint16_t      closed_index_ = 0;
+    bool          have_closed_  = false;
 
     std::thread       thread_;
     std::atomic<bool> running_{false};

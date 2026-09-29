@@ -29,8 +29,29 @@ ControllerWorker::SubtaskReport ControllerWorker::step_status(const std::optiona
                                                              const RobotTransforms* rt,
                                                              FollowPhase phase, double dt) {
     SubtaskReport r;
-    const bool have_goal = goal && goal->valid;
 
+    // (A) A terminal verdict (DONE/FAILED) is emitted for exactly 3 publishes, then IDLE.
+    if (term_active_) {
+        r.status = term_status_; r.plan_id = term_plan_; r.index = term_index_;
+        r.action = term_action_; r.detail = term_detail_;
+        r.progress = (term_status_ == SubtaskStatus::Done) ? 1.0f : term_progress_;
+        if (++term_count_ >= 3) {
+            term_active_ = false;
+            closed_plan_ = term_plan_; closed_index_ = term_index_; have_closed_ = true;
+        }
+        return r;
+    }
+
+    auto start_terminal = [&](SubtaskStatus st, const std::string& pid, uint16_t idx,
+                              const std::string& act, const std::string& detail, float prog) {
+        term_active_ = true; term_count_ = 1;
+        term_status_ = st; term_plan_ = pid; term_index_ = idx; term_action_ = act;
+        term_detail_ = detail; term_progress_ = prog;
+        r.status = st; r.plan_id = pid; r.index = idx; r.action = act; r.detail = detail;
+        r.progress = (st == SubtaskStatus::Done) ? 1.0f : prog;
+    };
+
+    const bool have_goal = goal && goal->valid;
     float rx = 0.f, ry = 0.f; bool have_pose = false;
     if (rt) { rx = float(rt->T_odom_pelvis.translation.x());
               ry = float(rt->T_odom_pelvis.translation.y()); have_pose = true; }
@@ -38,80 +59,64 @@ ControllerWorker::SubtaskReport ControllerWorker::step_status(const std::optiona
         return (goal && have_pose) ? std::hypot(goal->x - rx, goal->y - ry) : 0.f;
     };
 
+    // (B) an active subtask
     if (have_goal) {
-        holding_ = false;                                   // a live goal supersedes any prior hold
         const std::string& pid = goal->plan_id;
         const uint16_t     idx = goal->index;
         if (!have_cur_ || pid != cur_plan_ || idx != cur_index_) {   // new subtask
             cur_plan_ = pid; cur_index_ = idx; have_cur_ = true;
-            initial_dist_ = std::max(0.05f, goal_dist());    // capture start distance (avoid /0)
+            initial_dist_ = std::max(0.05f, goal_dist());
+            arrival_hold_ = 0.0; nopath_hold_ = 0.0; have_closed_ = false;
+        }
+        const float prog = std::clamp(1.0f - goal_dist() / initial_dist_, 0.0f, 1.0f);
+
+        if (phase == FollowPhase::Arrived) {
+            arrival_hold_ += dt; nopath_hold_ = 0.0;
+            if (arrival_hold_ >= arrival_hold_s_) {         // debounced -> DONE
+                goals_->notify_arrived();                   // drop the subtask (path clears, robot idles)
+                start_terminal(SubtaskStatus::Done, pid, idx, goal->action, "", 1.0f);
+                return r;
+            }
+        } else if (phase == FollowPhase::NoPath) {
+            nopath_hold_ += dt; arrival_hold_ = 0.0;
+            if (nopath_hold_ >= nopath_hold_s_) {           // sustained no-path -> FAILED
+                goals_->notify_arrived();
+                start_terminal(SubtaskStatus::Failed, pid, idx, goal->action, "no path", prog);
+                return r;
+            }
+        } else {
             arrival_hold_ = 0.0; nopath_hold_ = 0.0;
         }
-        r.plan_id = pid; r.index = idx; r.action = goal->action;
-        r.progress = std::clamp(1.0f - goal_dist() / initial_dist_, 0.0f, 1.0f);
-
-        switch (phase) {
-            case FollowPhase::Arrived:
-                nopath_hold_ = 0.0;
-                arrival_hold_ += dt;                         // settling at the goal
-                if (arrival_hold_ >= arrival_hold_s_) {      // debounced -> DONE
-                    holding_ = true;
-                    arr_plan_ = pid; arr_index_ = idx; arr_action_ = goal->action;
-                    r.status = SubtaskStatus::Done; r.progress = 1.0f;
-                } else {
-                    r.status = SubtaskStatus::Running;       // held, not yet confirmed
-                }
-                break;
-            case FollowPhase::NoPath:
-                arrival_hold_ = 0.0;
-                nopath_hold_ += dt;                          // a transient no-path is still RUNNING;
-                if (nopath_hold_ >= nopath_hold_s_) {        // only a SUSTAINED one is a real failure
-                    r.status = SubtaskStatus::Failed; r.note = "no path";
-                } else {
-                    r.status = SubtaskStatus::Running;
-                }
-                break;
-            default:                                          // Driving/Aligning/Approaching/Blocked
-                arrival_hold_ = 0.0; nopath_hold_ = 0.0;
-                r.status = SubtaskStatus::Running;
-                break;
-        }
+        r.status = SubtaskStatus::Running; r.plan_id = pid; r.index = idx;
+        r.action = goal->action; r.progress = prog;
         return r;
     }
 
-    // ── no active goal ──
-    arrival_hold_ = 0.0; nopath_hold_ = 0.0;
+    // (C) no active goal
+    arrival_hold_ = 0.0; nopath_hold_ = 0.0; have_cur_ = false;
     const GoalDisposition disp = goal ? goal->disp : GoalDisposition::None;
-    if (disp == GoalDisposition::Failed) {                   // a fresh command was rejected
-        holding_ = false; have_cur_ = false;
-        r.status = SubtaskStatus::Failed; r.note = goal->note;
-        r.plan_id = goal->plan_id; r.index = goal->index; r.action = goal->action;
+    if (disp == GoalDisposition::Failed) {                  // rejected command (unsupported / bad args)
+        const bool already = have_closed_ && goal->plan_id == closed_plan_ && goal->index == closed_index_;
+        if (!already) {
+            start_terminal(SubtaskStatus::Failed, goal->plan_id, goal->index, goal->action, goal->note, 0.0f);
+            return r;
+        }
+        r.status = SubtaskStatus::Idle;                     // already reported -> idle
         return r;
     }
-    if (disp == GoalDisposition::Cancelled) {                // cancel -> IDLE, "cancelled"
-        holding_ = false; have_cur_ = false;
-        r.status = SubtaskStatus::Idle; r.note = "cancelled";
-        return r;                                            // plan_id/index/action empty (IDLE)
-    }
-    if (holding_) {                                          // consumed arrival -> DONE persists
-        r.status = SubtaskStatus::Done; r.progress = 1.0f;
-        r.plan_id = arr_plan_; r.index = arr_index_; r.action = arr_action_;
+    if (disp == GoalDisposition::Cancelled) {               // cancel -> IDLE, "cancelled"
+        r.status = SubtaskStatus::Idle; r.detail = "cancelled";
         return r;
     }
-    have_cur_ = false;                                       // genuinely idle
-    r.status = SubtaskStatus::Idle;
+    r.status = SubtaskStatus::Idle;                         // genuinely idle
     return r;
 }
 
 void ControllerWorker::run() {
-    auto last_step   = std::chrono::steady_clock::now();
-    auto last_status = last_step - std::chrono::milliseconds(100);   // publish immediately
-    auto last_print  = last_step;
-    bool prev_holding = false;
+    auto last_status = std::chrono::steady_clock::now() - std::chrono::milliseconds(100);
+    auto last_print  = std::chrono::steady_clock::now();
     while (running_) {
         const auto t0 = std::chrono::steady_clock::now();
-        const double dt = std::chrono::duration<double>(t0 - last_step).count();
-        last_step = t0;
 
         auto pathT = path_buf_->GetDataWithTime();
         auto rtT   = prod_->out_buf.GetDataWithTime();
@@ -124,30 +129,26 @@ void ControllerWorker::run() {
         NavCommand  cmd   = ctrl_.step(path, rt, cm.get(), goal ? &*goal : nullptr, &phase);
 
         cmd_buf_->SetData(cmd);
-        if (drive_enabled_) pub_->publish(cmd);              // Twist -> gearsonic (robot moves)
+        if (drive_enabled_) pub_->publish(cmd);              // Twist -> gearsonic (robot moves), ~20 Hz
 
-        // ── subtask state (rt/cortex/nav/state) ──
-        const SubtaskReport rep = step_status(goal, rt, phase, dt);
-        // On the confirmed-arrival edge, CONSUME the goal: planner then emits an empty path
-        // (rviz clears) and the robot idles at zero velocity while state holds DONE.
-        if (holding_ && !prev_holding) goals_->notify_arrived();
-        prev_holding = holding_;
-
-        if (t0 - last_status >= std::chrono::milliseconds(100)) {   // 10 Hz, always on
-            status_pub_->publish(rep.plan_id, rep.index, rep.action, rep.status, rep.progress, rep.note);
+        SubtaskReport rep;
+        if (t0 - last_status >= std::chrono::milliseconds(100)) {   // status FSM + publish @ 10 Hz
+            const double dt = std::chrono::duration<double>(t0 - last_status).count();
             last_status = t0;
-        }
+            rep = step_status(goal, rt, phase, dt);
+            status_pub_->publish(rep.plan_id, rep.index, rep.action, rep.status, rep.progress, rep.detail);
 
-        if (t0 - last_print >= std::chrono::milliseconds(500)) {
-            last_print = t0;
-            const char* ss = rep.status == SubtaskStatus::Running ? "RUNNING"
-                           : rep.status == SubtaskStatus::Done    ? "DONE"
-                           : rep.status == SubtaskStatus::Failed  ? "FAILED" : "IDLE";
-            std::printf("[controller] vx=% .2f vy=% .2f vyaw=% .2f  %-7s prog=%.2f  %s\n",
-                        cmd.vx, cmd.vy, cmd.vyaw, ss, rep.progress,
-                        drive_enabled_ ? "SENT" : "(preview)");
+            if (t0 - last_print >= std::chrono::milliseconds(500)) {
+                last_print = t0;
+                const char* ss = rep.status == SubtaskStatus::Running ? "RUNNING"
+                               : rep.status == SubtaskStatus::Done    ? "DONE"
+                               : rep.status == SubtaskStatus::Failed  ? "FAILED" : "IDLE";
+                std::printf("[controller] vx=% .2f vy=% .2f vyaw=% .2f  %-7s prog=%.2f  %s\n",
+                            cmd.vx, cmd.vy, cmd.vyaw, ss, rep.progress,
+                            drive_enabled_ ? "SENT" : "(preview)");
+            }
         }
-        std::this_thread::sleep_until(t0 + std::chrono::milliseconds(50));   // ~20 Hz
+        std::this_thread::sleep_until(t0 + std::chrono::milliseconds(50));   // ~20 Hz control
     }
 }
 
