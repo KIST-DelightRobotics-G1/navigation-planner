@@ -22,9 +22,9 @@ double yaw_of(const Eigen::Quaterniond& q) {
 void VizWorker::start(DataBuffer<ObstacleGrid>& grid_buf, DataBuffer<Costmap>& costmap_buf,
                       DataBuffer<Path>& path_buf, ObstacleGridPublisher& pub, ObstacleGridConfig gcfg,
                       LioTransformProducer& prod, LioReceiver& rx, DataBuffer<MapOdom>& mapodom,
-                      bool survey, std::vector<float> prior_map_xyz) {
+                      DataBuffer<Transform>& leveled_buf, bool survey, std::vector<float> prior_map_xyz) {
     grid_buf_ = &grid_buf; costmap_buf_ = &costmap_buf; path_buf_ = &path_buf; pub_ = &pub;
-    gcfg_ = gcfg; prod_ = &prod; rx_ = &rx; mapodom_ = &mapodom;
+    gcfg_ = gcfg; prod_ = &prod; rx_ = &rx; mapodom_ = &mapodom; leveled_buf_ = &leveled_buf;
     prior_map_xyz_ = std::move(prior_map_xyz);
     survey_ = survey;
     running_ = true;
@@ -67,6 +67,20 @@ void VizWorker::run() {
                     out[3*i] = float(q.x()); out[3*i+1] = float(q.y()); out[3*i+2] = float(q.z());
                 }
                 pub_->publish_cloud(out);
+
+                // Gravity-leveled cloud (rt/leveled_cloud): the registered scan through
+                // T_leveled_odom. Compare with rt/cloud_sway in rviz — leveled floor is flat.
+                if (leveled_buf_) {
+                    if (auto lev = leveled_buf_->GetData()) {
+                        std::vector<float> lvl(n * 3);
+                        for (std::size_t i = 0; i < n; ++i) {
+                            const Eigen::Vector3d p(scan->xyz[3*i], scan->xyz[3*i+1], scan->xyz[3*i+2]);
+                            const Eigen::Vector3d q = lev->transformPoint(p);
+                            lvl[3*i] = float(q.x()); lvl[3*i+1] = float(q.y()); lvl[3*i+2] = float(q.z());
+                        }
+                        pub_->publish_leveled(lvl);
+                    }
+                }
             }
         }
         // Survey (navigation.survey): print the robot's MAP-frame pose so you can drive it to a spot

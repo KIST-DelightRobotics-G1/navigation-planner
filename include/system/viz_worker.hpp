@@ -25,7 +25,7 @@ public:
     void start(DataBuffer<ObstacleGrid>& grid_buf, DataBuffer<Costmap>& costmap_buf,
                DataBuffer<Path>& path_buf, ObstacleGridPublisher& pub, ObstacleGridConfig gcfg,
                LioTransformProducer& prod, LioReceiver& rx, DataBuffer<MapOdom>& mapodom,
-               bool survey, std::vector<float> prior_map_xyz);
+               DataBuffer<Transform>& leveled_buf, bool survey, std::vector<float> prior_map_xyz);
     void stop();
 
 private:
@@ -39,6 +39,7 @@ private:
     LioTransformProducer*     prod_        = nullptr;   // lidar/pelvis pose + sway
     LioReceiver*              rx_          = nullptr;   // registered scan (for the sway cloud)
     DataBuffer<MapOdom>*      mapodom_     = nullptr;   // map->odom (for the survey map pose)
+    DataBuffer<Transform>*    leveled_buf_ = nullptr;   // T_leveled_odom (for rt/leveled_cloud viz)
     bool                      survey_      = false;     // navigation.survey: print robot map pose
     std::vector<float>        prior_map_xyz_;           // prior map (map frame) for the odom overlay
 
