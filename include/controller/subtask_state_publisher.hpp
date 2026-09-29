@@ -14,7 +14,7 @@
 #include <string>
 
 namespace unitree::robot { template <typename T> class ChannelPublisher; }
-namespace kist_msgs { class SubtaskState; }
+namespace cortex_msgs::msg::dds_ { class SubtaskState_; }
 
 namespace kist {
 
