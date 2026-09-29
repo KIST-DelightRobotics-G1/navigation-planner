@@ -1,4 +1,4 @@
-# kist-navigation-planner
+# navigation-planner
 
 C++ autonomous navigation planner for the Unitree G1 humanoid robot (ROS-free, DDS).
 
@@ -23,8 +23,8 @@ C++ autonomous navigation planner for the Unitree G1 humanoid robot (ROS-free, D
 #### 1. Clone Repository
 
 ```bash
-git clone https://github.com/Safety-Node/kist-navigation-planner.git
-cd kist-navigation-planner
+git clone https://github.com/KIST-DelightRobotics-G1/navigation-planner.git
+cd navigation-planner
 ```
 
 All following steps run from the repository root.
