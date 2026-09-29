@@ -1,0 +1,44 @@
+name: Docker build
+
+# Builds docker/Dockerfile on every PR and push to main — the same image
+# docker/build.sh produces — so a compile error shows up on the PR instead of
+# on a teammate's machine after the merge. Build only: nothing is pushed.
+on:
+  pull_request:
+    branches: [main]
+    paths-ignore: ['**.md', 'docs/**']
+  push:
+    branches: [main]
+    paths-ignore: ['**.md', 'docs/**']
+  workflow_dispatch:
+
+concurrency:
+  group: docker-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  image:
+    name: image (x86_64)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    steps:
+      # Hosted runners start with ~14 GB free; ros:humble plus Livox, FAST-LIO,
+      # PCL and the prior map need more.
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo docker image prune -af > /dev/null
+          df -h /
+
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build docker/Dockerfile
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
