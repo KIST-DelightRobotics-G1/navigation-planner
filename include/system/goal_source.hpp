@@ -16,7 +16,9 @@
 #include "common/data_buffer.hpp"
 #include "goal_generation/goal.hpp"
 #include "localization/map_odom.hpp"
+#include "transforms/transform.hpp"
 
+#include <Eigen/Dense>
 #include <chrono>
 #include <mutex>
 #include <optional>
@@ -25,8 +27,9 @@ namespace kist {
 
 class GoalSource {
 public:
-    void bind(DataBuffer<Goal>* rviz, DataBuffer<Goal>* named, DataBuffer<MapOdom>* mapodom) {
-        rviz_ = rviz; named_ = named; mapodom_ = mapodom;
+    void bind(DataBuffer<Goal>* rviz, DataBuffer<Goal>* named, DataBuffer<MapOdom>* mapodom,
+              DataBuffer<Transform>* leveled) {
+        rviz_ = rviz; named_ = named; mapodom_ = mapodom; leveled_ = leveled;
     }
 
     std::optional<Goal> active() const {
@@ -41,12 +44,12 @@ public:
         }
 
         const Goal& g = *picked->data;
-        if (!g.in_map) return g;                          // odom goal (rviz) -> pass through
+        if (!g.in_map) return level(g);                   // odom goal (rviz) -> level -> planner frame
 
         // map-frame goal: needs the current map->odom to convert; none yet -> hold (stop).
         auto mo = mapodom_ ? mapodom_->GetData() : nullptr;
         if (!mo) { Goal ng = g; ng.valid = false; return ng; }
-        return goal_to_odom(g, *mo);
+        return level(goal_to_odom(g, *mo));               // odom -> leveled (same frame as the grid)
     }
 
     // The controller calls this once it has CONFIRMED arrival (debounced). It snapshots the active
@@ -59,6 +62,24 @@ public:
     }
 
 private:
+    // Convert an ODOM goal into the gravity-leveled planner frame (identity until the leveler locks).
+    // A goal is a floor point with no z, so project it onto the floor plane (recovered from
+    // T_leveled_odom) before transforming, else robot and goal disagree by ~tilt*floor_height.
+    Goal level(Goal g) const {
+        if (!g.valid || !leveled_) return g;
+        auto T = leveled_->GetData();
+        if (!T) return g;
+        const Eigen::Matrix3d R = T->rotation.toRotationMatrix();
+        const Eigen::Vector3d n(R(2,0), R(2,1), R(2,2));  // floor normal (leveled +z) in odom
+        const double n_dot_c = -T->translation.z();       // plane: n.p = n.c  (t.z = -n.c)
+        const double gz = (std::abs(n.z()) > 1e-6)
+            ? (n_dot_c - n.x()*g.x - n.y()*g.y) / n.z()   // floor z under the goal (odom)
+            : 0.0;
+        const Eigen::Vector3d gl = T->transformPoint(Eigen::Vector3d(g.x, g.y, gz));
+        g.x = float(gl.x()); g.y = float(gl.y());          // yaw preserved by the leveling (heading)
+        return g;
+    }
+
     // The freshest of the two goal channels, with its buffer write-time (nullopt if neither has data).
     std::optional<TimestampedData<Goal>> pick_raw() const {
         if (!rviz_ || !named_) return std::nullopt;
@@ -73,6 +94,7 @@ private:
     DataBuffer<Goal>*    rviz_    = nullptr;
     DataBuffer<Goal>*    named_   = nullptr;
     DataBuffer<MapOdom>* mapodom_ = nullptr;
+    DataBuffer<Transform>* leveled_ = nullptr;   // T_leveled_odom (odom -> planner frame)
 
     mutable std::mutex                            mtx_;         // guards the consume latch
     bool                                          consumed_ = false;

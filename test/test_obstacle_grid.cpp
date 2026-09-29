@@ -77,7 +77,7 @@ int main(int argc, char** argv) {
         auto rt = prod.nearest(scan->stamp_ns);
         if (!rt) continue;
 
-        mapper.update_map(*scan, *rt);
+        mapper.update_map(*scan, *rt, kist::Transform{});   // identity: raw odom (no ground leveling)
         const ObstacleGrid& grid = mapper.grid();
         const Costmap&      cm   = mapper.costmap();
         pub.publish(grid, mapper.gcfg);

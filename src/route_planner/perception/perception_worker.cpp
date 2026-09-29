@@ -33,7 +33,7 @@ void PerceptionWorker::run() {
         auto rt = prod_->nearest(scan->stamp_ns);
         if (!rt) continue;                            // no pose for this scan
 
-        // Ground-leveling estimate (DIAGNOSTIC ONLY for now — grid still built in raw odom below).
+        // Ground-leveling estimate -> T_leveled_odom (identity until locked); applied to the grid below.
         const bool just_locked = leveler_.update(*scan, rt->T_odom_lidar, rt->T_odom_pelvis);
         const int  acc = leveler_.accepted_frames();
         if (just_locked)
@@ -43,9 +43,10 @@ void PerceptionWorker::run() {
             std::printf("[ground_leveler] fit %d/%d  tilt = %.2f deg\n",
                         acc, leveler_.config().lock_frames, leveler_.tilt_deg());
         last_acc = acc;
-        leveled_buf_->SetData(leveler_.T_leveled_odom());   // publish for viz + downstream
+        const Transform T_lev = leveler_.T_leveled_odom();   // identity until locked
+        leveled_buf_->SetData(T_lev);                        // share for viz + goal/controller
 
-        mapper_.update_map(*scan, *rt);               // unchanged: grid in raw odom (Phase 1)
+        mapper_.update_map(*scan, *rt, T_lev);        // grid built in the leveled frame
         grid_buf_->SetData(mapper_.grid());
         costmap_buf_->SetData(mapper_.costmap());
     }
