@@ -28,11 +28,20 @@
   <Domain id="any">
     <General>
       <Interfaces>
-        <!-- NIC toward the DDS peers on THIS machine: robot-LAN interface on the
-             onboard PC (e.g. eth0, eno2); "lo" for same-machine testing. -->
-        <NetworkInterface name="eno2" priority="default" multicast="default"/>
+        <!-- Default "lo" (loopback): works out of the box for same-machine testing
+             / integration (nav + LIO + cortex + VLA on one host). For an ON-ROBOT
+             deployment, change this to the robot-LAN NIC on your machine (e.g. eno2,
+             eth0) — robot data (rt/lowstate, UWB, ...) arrives ONLY on that NIC.
+             `ip -br link` lists the interfaces. -->
+        <NetworkInterface name="lo" priority="default" multicast="default"/>
       </Interfaces>
     </General>
+    <!-- lo has no multicast, so discover local participants over unicast localhost.
+         Harmless on a real NIC (multicast discovery still works there). -->
+    <Discovery>
+      <Peers><Peer address="localhost"/></Peers>
+      <ParticipantIndex>auto</ParticipantIndex>
+    </Discovery>
     <Internal>
       <SocketReceiveBufferSize min="16MB"/>
       <DefragUnreliableMaxSamples>64</DefragUnreliableMaxSamples>
