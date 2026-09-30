@@ -52,6 +52,12 @@ public:
     const FollowConfig& config() const { return cfg_; }
     void set_config(const FollowConfig& c) { cfg_ = c; }
 
+    // Clear the terminal latch. Call at the START of a new run so a fresh goal — even the SAME
+    // destination re-issued after the robot has moved away — drives again instead of inheriting
+    // the previous run's "arrived" state. (The in-run "goal moved > 0.3 m" reset below only
+    // catches a goal that jumps mid-run; it cannot tell that the robot left an unchanged goal.)
+    void reset() { at_goal_ = false; have_last_ = false; }
+
 private:
     FollowConfig cfg_;
     bool  at_goal_   = false;   // latched terminal mode (align/approach/arrived)

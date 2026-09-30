@@ -77,6 +77,13 @@ private:
     bool        have_cur_   = false;
     float       initial_dist_ = 0.0f;     // robot->goal distance captured at subtask start (progress)
 
+    // New-run edge detection: reset the follower's terminal latch when a fresh goal activates
+    // (idle -> active, or a different subtask), so re-issuing the SAME destination after the robot
+    // has left the goal drives again instead of inheriting the last run's "arrived" latch.
+    bool        was_active_ = false;      // was there an active goal on the previous tick?
+    std::string run_plan_;                // subtask id of the run currently being followed
+    uint16_t    run_index_ = 0;
+
     // Terminal burst: DONE/FAILED is emitted for exactly 3 publishes, then IDLE.
     bool          term_active_ = false;
     int           term_count_  = 0;
