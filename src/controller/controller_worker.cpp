@@ -140,6 +140,16 @@ void ControllerWorker::run() {
             rtp = &rt_lev;
         }
 
+        // New-run edge: a goal just (re)activated (idle -> active, or a different subtask). Clear
+        // the follower's terminal latch so re-issuing the same destination after the robot has left
+        // the goal drives again instead of inheriting the previous run's "arrived" state.
+        const bool goal_active = goal && goal->valid;
+        if (goal_active && (!was_active_ || goal->plan_id != run_plan_ || goal->index != run_index_)) {
+            ctrl_.reset();
+            run_plan_ = goal->plan_id; run_index_ = goal->index;
+        }
+        was_active_ = goal_active;
+
         FollowPhase phase = FollowPhase::Arrived;
         NavCommand  cmd   = ctrl_.step(path, rtp, cm.get(), goal ? &*goal : nullptr, &phase);
 

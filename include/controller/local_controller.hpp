@@ -31,6 +31,10 @@ public:
     const FollowConfig& config() const { return follower_.config(); }
     void set_config(const FollowConfig& c) { follower_.set_config(c); }
 
+    // Reset per-run controller state (the follower's terminal latch). Call when a new run begins
+    // so a re-issued goal is followed fresh rather than inheriting the last run's "arrived" state.
+    void reset() { follower_.reset(); }
+
 private:
     PathFollower follower_;
     uint8_t      lethal_ = 254;   // reactive-stop cost threshold (= costmap lethal_cost)
