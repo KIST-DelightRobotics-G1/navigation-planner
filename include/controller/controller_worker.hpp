@@ -33,7 +33,8 @@ public:
     // (a transient no-path is reported RUNNING; only a sustained one this long -> FAILED "no path").
     void start(DataBuffer<Path>& path_buf, LioTransformProducer& prod, DataBuffer<Costmap>& costmap_buf,
                GoalSource& goals, DataBuffer<NavCommand>& cmd_buf, NavCommandPublisher& pub,
-               SubtaskStatePublisher& status_pub, bool drive_enabled, const FollowConfig& fc,
+               SubtaskStatePublisher& status_pub, DataBuffer<Transform>& leveled_buf,
+               bool drive_enabled, const FollowConfig& fc,
                double arrival_hold_s = 1.0, double nopath_hold_s = 4.0);
     void stop();
 
@@ -63,6 +64,7 @@ private:
     DataBuffer<NavCommand>*  cmd_buf_     = nullptr;
     NavCommandPublisher*     pub_         = nullptr;
     SubtaskStatePublisher*   status_pub_  = nullptr;
+    DataBuffer<Transform>*   leveled_buf_ = nullptr;   // T_leveled_odom (odom -> planner frame)
     bool                     drive_enabled_ = false;
     double                   arrival_hold_s_ = 1.0;
     double                   nopath_hold_s_  = 4.0;

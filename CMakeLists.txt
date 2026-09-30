@@ -136,6 +136,7 @@ add_library(route_planner STATIC
     src/route_planner/perception/costmap_builder/costmap_builder.cpp
     src/route_planner/perception/costmap_builder/edt.cpp
     src/route_planner/perception/costmap_builder/clearance.cpp
+    src/route_planner/perception/ground_leveler.cpp
     src/route_planner/perception/obstacle_mapper.cpp
     src/route_planner/planner/astar_planner/astar_planner.cpp
     src/route_planner/planner/route_smoothing/route_smoother.cpp

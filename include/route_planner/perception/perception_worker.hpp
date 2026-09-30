@@ -9,6 +9,7 @@
 #include "lio/lio_receiver.hpp"
 #include "lio/lio_transform_producer.hpp"
 #include "route_planner/perception/costmap_builder/costmap.hpp"
+#include "route_planner/perception/ground_leveler.hpp"
 #include "route_planner/perception/obstacle_grid_builder/obstacle_grid.hpp"
 #include "route_planner/perception/obstacle_mapper.hpp"
 
@@ -22,7 +23,8 @@ public:
     ~PerceptionWorker() { stop(); }
 
     void start(LioReceiver& rx, LioTransformProducer& prod,
-               DataBuffer<ObstacleGrid>& grid_buf, DataBuffer<Costmap>& costmap_buf);
+               DataBuffer<ObstacleGrid>& grid_buf, DataBuffer<Costmap>& costmap_buf,
+               DataBuffer<Transform>& leveled_buf);   // T_leveled_odom out (for viz + downstream)
     void stop();
 
     const ObstacleGridConfig& gcfg() const { return mapper_.gcfg; }   // for viz (resolution/band)
@@ -31,10 +33,12 @@ private:
     void run();
 
     ObstacleMapper            mapper_;
+    GroundLeveler             leveler_;   // estimates T_leveled_odom (diagnostic-only for now)
     LioReceiver*              rx_        = nullptr;
     LioTransformProducer*     prod_      = nullptr;
     DataBuffer<ObstacleGrid>* grid_buf_  = nullptr;
     DataBuffer<Costmap>*      costmap_buf_ = nullptr;
+    DataBuffer<Transform>*    leveled_buf_ = nullptr;   // T_leveled_odom (world-fixed, ~static)
 
     std::thread       thread_;
     std::atomic<bool> running_{false};

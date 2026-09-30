@@ -10,10 +10,12 @@ namespace kist {
 void ControllerWorker::start(DataBuffer<Path>& path_buf, LioTransformProducer& prod,
                              DataBuffer<Costmap>& costmap_buf, GoalSource& goals,
                              DataBuffer<NavCommand>& cmd_buf, NavCommandPublisher& pub,
-                             SubtaskStatePublisher& status_pub, bool drive_enabled,
-                             const FollowConfig& fc, double arrival_hold_s, double nopath_hold_s) {
+                             SubtaskStatePublisher& status_pub, DataBuffer<Transform>& leveled_buf,
+                             bool drive_enabled, const FollowConfig& fc,
+                             double arrival_hold_s, double nopath_hold_s) {
     path_buf_ = &path_buf; prod_ = &prod; costmap_buf_ = &costmap_buf; goals_ = &goals;
-    cmd_buf_ = &cmd_buf; pub_ = &pub; status_pub_ = &status_pub; drive_enabled_ = drive_enabled;
+    cmd_buf_ = &cmd_buf; pub_ = &pub; status_pub_ = &status_pub; leveled_buf_ = &leveled_buf;
+    drive_enabled_ = drive_enabled;
     arrival_hold_s_ = arrival_hold_s; nopath_hold_s_ = nopath_hold_s;
     ctrl_.set_config(fc);
     running_ = true;
@@ -125,8 +127,21 @@ void ControllerWorker::run() {
         const Path*            path = (pathT.HasData() && pathT.GetAgeMs() < 500.0) ? pathT.data.get() : nullptr;
         const RobotTransforms* rt   = (rtT.HasData()  && rtT.GetAgeMs()  < 500.0) ? rtT.data.get()  : nullptr;
 
+        // Level the base pose into the planner frame (grid/goal/path are leveled). Identity until lock.
+        RobotTransforms rt_lev;
+        const RobotTransforms* rtp = nullptr;
+        if (rt) {
+            rt_lev = *rt;
+            if (auto T = leveled_buf_ ? leveled_buf_->GetData() : nullptr) {
+                rt_lev.T_odom_pelvis.translation =
+                    T->rotation * rt->T_odom_pelvis.translation + T->translation;
+                rt_lev.T_odom_pelvis.rotation = T->rotation * rt->T_odom_pelvis.rotation;
+            }
+            rtp = &rt_lev;
+        }
+
         FollowPhase phase = FollowPhase::Arrived;
-        NavCommand  cmd   = ctrl_.step(path, rt, cm.get(), goal ? &*goal : nullptr, &phase);
+        NavCommand  cmd   = ctrl_.step(path, rtp, cm.get(), goal ? &*goal : nullptr, &phase);
 
         cmd_buf_->SetData(cmd);
         if (drive_enabled_) pub_->publish(cmd);              // Twist -> gearsonic (robot moves), ~20 Hz
@@ -135,7 +150,7 @@ void ControllerWorker::run() {
         if (t0 - last_status >= std::chrono::milliseconds(100)) {   // status FSM + publish @ 10 Hz
             const double dt = std::chrono::duration<double>(t0 - last_status).count();
             last_status = t0;
-            rep = step_status(goal, rt, phase, dt);
+            rep = step_status(goal, rtp, phase, dt);
             status_pub_->publish(rep.plan_id, rep.index, rep.action, rep.status, rep.progress, rep.detail);
 
             if (t0 - last_print >= std::chrono::milliseconds(500)) {

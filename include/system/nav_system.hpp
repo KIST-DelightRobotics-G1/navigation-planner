@@ -69,6 +69,7 @@ private:
     DataBuffer<Path>         path_buf_;
     DataBuffer<NavCommand>   cmd_buf_;
     DataBuffer<MapOdom>      mapodom_buf_;   // relocalizer output (map->odom); empty until locked
+    DataBuffer<Transform>    leveled_buf_;   // T_leveled_odom (ground leveler); identity until locked
     GoalSource               goal_src_;
 
     // ── workers (each owns its thread + loop; driven off the buffers above) ──

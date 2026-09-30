@@ -48,7 +48,8 @@ public:
                const std::string& pelvis_pose_topic = "rt/pelvis_pose",
                const std::string& sway_cloud_topic  = "rt/cloud_sway",
                const std::string& prior_map_topic   = "rt/prior_map",
-               const std::string& frame_id        = "camera_init");   // LIO odom frame
+               const std::string& frame_id        = "camera_init",   // LIO odom frame
+               const std::string& leveled_cloud_topic = "rt/leveled_cloud");
 
     // Convert + publish one grid snapshot (and the robot pose from grid.robot_*).
     void publish(const ObstacleGrid& g, const ObstacleGridConfig& cfg);
@@ -67,6 +68,11 @@ public:
     // rt/prior_map, so it overlays the live obstacle grid — the global frame's structure vs the
     // live scene. When localised it sits on the live walls; misalignment shows the map->odom error.
     void publish_prior(const std::vector<float>& xyz);
+
+    // The gravity-LEVELED scan on rt/leveled_cloud (caller pre-transforms by T_leveled_odom). View
+    // it next to rt/cloud_sway (raw) in rviz: the raw floor tilts with range, the leveled floor is
+    // flat — a direct visual check of the ground-leveling estimate. `xyz` is flat leveled points.
+    void publish_leveled(const std::vector<float>& xyz);
 
     // Publish the costmap as an OccupancyGrid (cost 0..lethal -> 0..100) on rt/costmap.
     void publish_costmap(const Costmap& cm);
@@ -107,6 +113,7 @@ private:
     std::unique_ptr<PosePub> pelvis_pose_pub_;   // T_odom_pelvis (stabilized)
     std::unique_ptr<PathPub> sway_cloud_pub_;    // registered scan + sway (shaking, rt/cloud_sway)
     std::unique_ptr<PathPub> prior_map_pub_;     // prior map in odom (global-frame overlay)
+    std::unique_ptr<PathPub> leveled_cloud_pub_; // gravity-leveled scan (rt/leveled_cloud)
 };
 
 } // namespace kist

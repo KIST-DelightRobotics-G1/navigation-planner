@@ -9,6 +9,7 @@
 
 #include "lio/lio_cloud.hpp"
 #include "lio/robot_transforms.hpp"
+#include "transforms/transform.hpp"
 #include "route_planner/perception/obstacle_grid_builder/obstacle_grid.hpp"
 #include "route_planner/perception/obstacle_grid_builder/obstacle_voxel_grid.hpp"
 #include "route_planner/perception/costmap_builder/costmap.hpp"
@@ -26,8 +27,10 @@ public:
     float              floor_ema = 0.05f;    // floor_z low-pass (gait bob)
 
     // Stateful map update — integrate one registered scan at its stamp-matched pose
-    // (RobotTransforms carries T_odom_lidar = ray origin, T_odom_pelvis = robot base).
-    void update_map(const LioCloud& scan, const RobotTransforms& tf);
+    // (RobotTransforms carries T_odom_lidar = ray origin, T_odom_pelvis = robot base). The scan +
+    // poses are expressed in the GRAVITY-LEVELED frame via T_leveled_odom (identity until the ground
+    // leveler locks = current odom behavior), so the floor is the XY plane (no tilt false-obstacles).
+    void update_map(const LioCloud& scan, const RobotTransforms& tf, const Transform& T_leveled_odom);
     const ObstacleGrid& grid()    const { return grid_; }
     const Costmap&      costmap() const { return costmap_; }
 

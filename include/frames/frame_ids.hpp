@@ -45,6 +45,11 @@ enum class FrameId {
     // Derived navigation frame (roll/pitch removed pelvis), sibling of pelvis
     BaseStabilized,
 
+    // Gravity-leveled odom: WORLD-FIXED (not robot-following) — odom with roll/pitch
+    // corrected so the floor is the XY plane (per-boot LOCK). The obstacle grid + planner
+    // run here so a tilted head at boot does not paint the floor as an obstacle.
+    LeveledOdom,
+
     // Sensors
     LidarImu,          // Mid-360 built-in IMU = the body the LIO engine tracks
                        // (odom->lidar_imu is LIO's dynamic edge; frame "camera_init"=odom)
@@ -62,6 +67,7 @@ inline constexpr std::string_view frame_name(FrameId f) {
         case FrameId::Pelvis:         return "pelvis";
         case FrameId::Torso:          return "torso";
         case FrameId::BaseStabilized: return "base_stabilized";
+        case FrameId::LeveledOdom:    return "leveled_odom";
         case FrameId::LidarImu:       return "lidar_imu";
         case FrameId::Lidar:          return "lidar";
         case FrameId::D455:           return "d455";
@@ -88,6 +94,7 @@ inline constexpr std::optional<FrameId> frame_parent(FrameId f) {
         case FrameId::Odom:           return FrameId::Map;
         case FrameId::Pelvis:         return FrameId::Odom;
         case FrameId::BaseStabilized: return FrameId::Odom;   // sibling of pelvis
+        case FrameId::LeveledOdom:    return FrameId::Odom;   // world-fixed, derived from odom
         case FrameId::Torso:          return FrameId::Pelvis;
         case FrameId::LidarImu:       return FrameId::Odom;   // LIO tracks it directly
         case FrameId::Lidar:          return FrameId::LidarImu;
