@@ -84,6 +84,11 @@ private:
     std::string run_plan_;                // subtask id of the run currently being followed
     uint16_t    run_index_ = 0;
 
+    // Last reported subtask status/progress (from step_status @10 Hz), held for the trace @20 Hz.
+    SubtaskStatus last_status_   = SubtaskStatus::Idle;
+    float         last_progress_ = 0.0f;
+    SubtaskStatus last_printed_status_ = SubtaskStatus::Idle;   // console prints only on a change
+
     // Terminal burst: DONE/FAILED is emitted for exactly 3 publishes, then IDLE.
     bool          term_active_ = false;
     int           term_count_  = 0;

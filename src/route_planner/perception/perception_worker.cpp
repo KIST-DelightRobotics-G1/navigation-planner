@@ -39,9 +39,9 @@ void PerceptionWorker::run() {
         if (just_locked)
             std::printf("[ground_leveler] LOCKED after %d fits — floor tilt = %.2f deg\n",
                         acc, leveler_.tilt_deg());
-        else if (!leveler_.locked() && acc != last_acc)
-            std::printf("[ground_leveler] fit %d/%d  tilt = %.2f deg\n",
-                        acc, leveler_.config().lock_frames, leveler_.tilt_deg());
+        else if (!leveler_.locked() && acc == 1 && acc != last_acc)   // first fit only; progress is in the trace
+            std::printf("[ground_leveler] estimating floor tilt (fit 1/%d = %.2f deg) ...\n",
+                        leveler_.config().lock_frames, leveler_.tilt_deg());
         last_acc = acc;
         const Transform T_lev = leveler_.T_leveled_odom();   // identity until locked
         leveled_buf_->SetData(T_lev);                        // share for viz + goal/controller

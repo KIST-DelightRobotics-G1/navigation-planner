@@ -75,9 +75,15 @@ bool uwb_compute_seed(UwbReceiver& uwb, const std::string& sidecar_path,
     out_seed.block<3,3>(0,0) = Eigen::AngleAxisf(seed_yaw_rad, Eigen::Vector3f::UnitZ()).toRotationMatrix();
     out_seed(0,3) = pbx + (c*dx - s*dy);
     out_seed(1,3) = pby + (s*dx + c*dy);
-    std::cout << "[uwb_seed] recorded=(" << ox << "," << oy << ") P_B=(" << pbx << "," << pby
-              << ") now=(" << now.x << "," << now.y << ") -> map xy=("
-              << out_seed(0,3) << "," << out_seed(1,3) << ")\n";
+    // Called every localization cycle; log only the first success (confirms UWB is feeding the
+    // seed + a sane map xy). The per-cycle UWB is in the trace.
+    static bool logged_once = false;
+    if (!logged_once) {
+        logged_once = true;
+        std::cout << "[uwb_seed] recorded=(" << ox << "," << oy << ") P_B=(" << pbx << "," << pby
+                  << ") now=(" << now.x << "," << now.y << ") -> map xy=("
+                  << out_seed(0,3) << "," << out_seed(1,3) << ")\n";
+    }
     return true;
 }
 

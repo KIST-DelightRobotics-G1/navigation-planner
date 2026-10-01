@@ -1,7 +1,9 @@
 #include "system/nav_system.hpp"
 
 #include "common/config.hpp"
+#include "common/console_tee.hpp"
 #include "common/dds_config.hpp"
+#include "common/nav_trace.hpp"
 #include "unitree/unitree_state_reader.hpp"
 
 #include <Eigen/Geometry>
@@ -16,6 +18,10 @@ namespace kist {
 namespace { NavSystem* g_self = nullptr; }
 
 bool NavSystem::start(const std::string& config_path) {
+    // Console mirror first, so EVERY line this run prints (including config / DDS / SDK warnings and
+    // a crash's last lines) is also on disk at logs/latest.log. Overwritten each run.
+    console_started_ = ConsoleTee::instance().start("logs/latest.log");
+
     Config::instance().load(config_path);
     const auto& root = Config::instance().root();
     const int domain = root["unitree"]["domain_id"].as<int>(0);
@@ -107,7 +113,7 @@ bool NavSystem::start(const std::string& config_path) {
 
         UwbReceiver* uwb_ptr = uwb_started_ ? &uwb_ : nullptr;
         if (!loc_.start(rx_, prod_, uwb_ptr, prior_map, sidecar, map_uwb_yaw, tag_in_pelvis,
-                        fallback, mapodom_buf_, rcfg, fcfg))
+                        fallback, mapodom_buf_, rcfg, fcfg, &loc_sample_buf_))
             std::cerr << "[NavSystem] localization disabled (no prior map at " << prior_map
                       << "); named/map goals need it.\n";
     }
@@ -120,6 +126,18 @@ bool NavSystem::start(const std::string& config_path) {
                 leveled_buf_, drive_enabled, fc, arrival_hold_s, nopath_hold_s);
     viz_.start(grid_buf_, costmap_buf_, path_buf_, pub_, perc_.gcfg(), prod_, rx_, mapodom_buf_,
                leveled_buf_, survey, loc_.prior_xyz());   // + T_leveled_odom for rt/leveled_cloud
+
+    // Per-tick numeric trace (logs/latest.trace) — a pure observer of the buffers above, filled by
+    // the controller thread (zero I/O there; a background thread writes). Default on.
+    {
+        const auto tr = root["trace"];
+        const bool trace_on = !tr || !tr["enabled"] || tr["enabled"].as<bool>(true);
+        const std::string trace_path = (tr && tr["path"]) ? tr["path"].as<std::string>()
+                                                          : std::string("logs/latest.trace");
+        NavTrace::instance().bind(&prod_.out_buf, &leveled_buf_, &path_buf_, &costmap_buf_,
+                                  &loc_sample_buf_);
+        if (trace_on) trace_started_ = NavTrace::instance().start(trace_path);
+    }
 
     std::cout << "[NavSystem] up: perception + planning + controller + viz (domain " << domain << ").\n";
     if (drive_enabled)
@@ -138,6 +156,8 @@ void NavSystem::stop() {
     plan_.stop();
     perc_.stop();
     loc_.stop();
+    // Trace after the workers (no more record() calls); it drains the ring and closes the file.
+    if (trace_started_) { NavTrace::instance().stop(); trace_started_ = false; }
     if (cmd_pub_started_) { cmd_pub_.stop(); cmd_pub_started_ = false; }   // final zero Twist
     if (status_pub_started_) { status_pub_.stop(); status_pub_started_ = false; }
     if (uwb_started_) { uwb_.stop(); uwb_started_ = false; }
@@ -147,6 +167,8 @@ void NavSystem::stop() {
     if (rx_started_) { rx_.stop(); rx_started_ = false; }
     if (sr_started_) { UnitreeStateReader::instance().stop(); sr_started_ = false; }
     pub_started_ = false;   // publisher stops with its dtor
+    // Console mirror last, so every shutdown line above is captured before fds 1/2 are restored.
+    if (console_started_) { ConsoleTee::instance().stop(); console_started_ = false; }
 }
 
 void NavSystem::install_signal_handlers() {

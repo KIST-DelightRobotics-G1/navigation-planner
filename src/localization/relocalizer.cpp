@@ -274,8 +274,13 @@ GlobalInitResult Relocalizer::global_init(const Eigen::Vector2f& tag_xy_map,
         return candidate_T(yaw_deg * float(M_PI) / 180.f, tag_xy_map, tag_in_pelvis, z_base, T_odom_base_inv);
     };
 
-    std::printf("[global_init] scoring: submap walls=%zu, prior walls=%zu (inlier<%.2fm)\n",
-                impl_->submap_score->size(), impl_->prior_score->size(), cfg_.gi_inlier_thresh_m);
+    // global_init runs ~1 Hz while searching. The console event is owned by LocalizationWorker's
+    // phase print ("[localization] search ..." on entry, "[localization] LOCK(init) ..." on lock),
+    // so the per-attempt scoring/coarse/refine detail here is verbose-only (off by default); the
+    // per-cycle numbers are in the trace.
+    if (verbose)
+        std::printf("[global_init] scoring: submap walls=%zu, prior walls=%zu (inlier<%.2fm)\n",
+                    impl_->submap_score->size(), impl_->prior_score->size(), cfg_.gi_inlier_thresh_m);
 
     // Stage 1: coarse sweep 0..360 (subsampled), robust inlier-ratio score.
     const float step = cfg_.gi_yaw_step_deg > 0.1f ? cfg_.gi_yaw_step_deg : 10.f;
@@ -304,8 +309,9 @@ GlobalInitResult Relocalizer::global_init(const Eigen::Vector2f& tag_xy_map,
         }
     const float confidence = best_r > 1e-6f ? (best_r - second_r) / best_r : 0.f;
 
-    std::printf("[global_init] coarse: best yaw=%.0f r=%.2f | 2nd yaw=%.0f r=%.2f | confidence=%.2f\n",
-                best_yaw, best_r, second_yaw, second_r, confidence);
+    if (verbose)
+        std::printf("[global_init] coarse: best yaw=%.0f r=%.2f | 2nd yaw=%.0f r=%.2f | confidence=%.2f\n",
+                    best_yaw, best_r, second_yaw, second_r, confidence);
 
     // Stage 2/3: refine yaw around the coarse peak (full submap, no subsample).
     auto refine = [&](float center, float half_range, float fine_step) {
@@ -340,9 +346,10 @@ GlobalInitResult Relocalizer::global_init(const Eigen::Vector2f& tag_xy_map,
     const bool conf_ok   = (confidence >= cfg_.gi_min_confidence);
     r.ok = inlier_ok && (conf_ok || stable);
 
-    std::printf("[global_init] refine yaw=%.1f r=%.2f conf=%.2f stable=%d/%d -> %s%s\n",
-                r.yaw_deg, r.inlier_ratio, confidence, int(recent_best_yaws_.size()), cfg_.gi_stable_frames,
-                r.ok ? "ACCEPT" : "reject", (r.ok && !conf_ok && stable) ? " (by stability)" : "");
+    if (verbose)   // the lock event is announced by LocalizationWorker (phase -> LOCK(init))
+        std::printf("[global_init] refine yaw=%.1f r=%.2f conf=%.2f stable=%d/%d -> %s%s\n",
+                    r.yaw_deg, r.inlier_ratio, confidence, int(recent_best_yaws_.size()), cfg_.gi_stable_frames,
+                    r.ok ? "ACCEPT" : "reject", (r.ok && !conf_ok && stable) ? " (by stability)" : "");
 
     if (r.ok) { T_map_odom_ = r.T_map_odom; seed_yaw_ = yaw3 * float(M_PI) / 180.f; seeded_ = true; }
     return r;

@@ -35,6 +35,8 @@ public:
     // so a re-issued goal is followed fresh rather than inheriting the last run's "arrived" state.
     void reset() { follower_.reset(); }
 
+    bool at_goal() const { return follower_.at_goal(); }   // terminal latch (diagnostics / trace)
+
 private:
     PathFollower follower_;
     uint8_t      lethal_ = 254;   // reactive-stop cost threshold (= costmap lethal_cost)

@@ -48,3 +48,12 @@ navigation:
   drive: false    # false = preview (no Twist published; robot will NOT move).
                   # true  = arm the Twist output on rt/kist/nav/cmd_vel -> gearsonic. THE ROBOT MOVES.
   survey: false   # true = print the robot's MAP-frame pose each cycle (for surveying destinations).
+
+# Run logging (both overwritten each run, read after the fact):
+#   logs/latest.log   : full console mirror (stdout+stderr, incl. SDK/DDS) — always on (console_tee).
+#   logs/latest.trace : per-tick numeric trace of controller/planner/pose/leveler/localization/IMU.
+# The trace fills a ring on the control thread (no I/O there) and a background thread writes it, so
+# it does not delay the control loop. Read with tools/read_trace.py. ~50 KB/s at 20 Hz.
+trace:
+  enabled: true
+  path: logs/latest.trace
