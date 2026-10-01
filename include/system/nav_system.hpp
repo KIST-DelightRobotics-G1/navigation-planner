@@ -13,6 +13,7 @@
 
 #include "common/data_buffer.hpp"
 #include "controller/nav_command.hpp"
+#include "localization/loc_sample.hpp"
 #include "controller/nav_command_publisher.hpp"
 #include "controller/subtask_state_publisher.hpp"
 #include "goal_generation/destination_publisher.hpp"
@@ -70,6 +71,7 @@ private:
     DataBuffer<NavCommand>   cmd_buf_;
     DataBuffer<MapOdom>      mapodom_buf_;   // relocalizer output (map->odom); empty until locked
     DataBuffer<Transform>    leveled_buf_;   // T_leveled_odom (ground leveler); identity until locked
+    DataBuffer<LocSample>    loc_sample_buf_; // localization diagnostics snapshot (NavTrace only)
     GoalSource               goal_src_;
 
     // ── workers (each owns its thread + loop; driven off the buffers above) ──
@@ -83,7 +85,8 @@ private:
 
     bool sr_started_{false}, rx_started_{false}, gr_started_{false},
          destpub_started_{false}, goalcmd_started_{false}, uwb_started_{false},
-         pub_started_{false}, cmd_pub_started_{false}, status_pub_started_{false};
+         pub_started_{false}, cmd_pub_started_{false}, status_pub_started_{false},
+         console_started_{false}, trace_started_{false};
 };
 
 } // namespace kist

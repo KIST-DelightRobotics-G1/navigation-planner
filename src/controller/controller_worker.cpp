@@ -1,5 +1,7 @@
 #include "controller/controller_worker.hpp"
 
+#include "common/nav_trace.hpp"
+
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -116,7 +118,6 @@ ControllerWorker::SubtaskReport ControllerWorker::step_status(const std::optiona
 
 void ControllerWorker::run() {
     auto last_status = std::chrono::steady_clock::now() - std::chrono::milliseconds(100);
-    auto last_print  = std::chrono::steady_clock::now();
     while (running_) {
         const auto t0 = std::chrono::steady_clock::now();
 
@@ -161,18 +162,53 @@ void ControllerWorker::run() {
             const double dt = std::chrono::duration<double>(t0 - last_status).count();
             last_status = t0;
             rep = step_status(goal, rtp, phase, dt);
+            last_status_ = rep.status; last_progress_ = rep.progress;   // held for the 20 Hz trace
             status_pub_->publish(rep.plan_id, rep.index, rep.action, rep.status, rep.progress, rep.detail);
 
-            if (t0 - last_print >= std::chrono::milliseconds(500)) {
-                last_print = t0;
+            // Console: only on a status transition (IDLE/RUNNING/DONE/FAILED). The full per-tick
+            // detail (vx/vy/vyaw/prog every 50 ms) lives in the trace (logs/latest.trace).
+            if (rep.status != last_printed_status_) {
+                last_printed_status_ = rep.status;
                 const char* ss = rep.status == SubtaskStatus::Running ? "RUNNING"
                                : rep.status == SubtaskStatus::Done    ? "DONE"
                                : rep.status == SubtaskStatus::Failed  ? "FAILED" : "IDLE";
-                std::printf("[controller] vx=% .2f vy=% .2f vyaw=% .2f  %-7s prog=%.2f  %s\n",
-                            cmd.vx, cmd.vy, cmd.vyaw, ss, rep.progress,
+                std::printf("[controller] %-7s vx=% .2f vy=% .2f vyaw=% .2f  prog=%.2f  %s\n",
+                            ss, cmd.vx, cmd.vy, cmd.vyaw, rep.progress,
                             drive_enabled_ ? "SENT" : "(preview)");
             }
         }
+        // Per-tick numeric trace. NavTrace copies into a ring (no I/O here); no-op if disabled.
+        {
+            NavTrace::TickInfo ti;
+            ti.t0      = t0;
+            ti.tick_us = std::chrono::duration_cast<std::chrono::microseconds>(
+                             std::chrono::steady_clock::now() - t0).count();
+            ti.follow_phase   = static_cast<int>(phase);
+            ti.subtask_status = static_cast<int>(last_status_);
+            ti.progress       = last_progress_;
+            ti.cmd_vx = cmd.vx; ti.cmd_vy = cmd.vy; ti.cmd_vyaw = cmd.vyaw;
+            ti.drive_enabled = drive_enabled_ ? 1 : 0;
+            ti.sent          = drive_enabled_ ? 1 : 0;
+            ti.at_goal       = ctrl_.at_goal() ? 1 : 0;
+            ti.arrival_hold  = static_cast<float>(arrival_hold_);
+            ti.nopath_hold   = static_cast<float>(nopath_hold_);
+            if (goal && goal->valid) {
+                ti.goal_valid    = 1;
+                ti.goal_in_map   = goal->in_map ? 1 : 0;
+                ti.goal_x        = goal->x; ti.goal_y = goal->y;
+                ti.goal_yaw      = goal->has_yaw ? goal->yaw : 0.f;
+                ti.dock_align    = goal->dock.align ? 1 : 0;
+                ti.dock_approach = goal->dock.approach ? 1 : 0;
+                ti.dock_standoff = goal->dock.standoff_m;
+                ti.subtask_index = goal->index;
+                ti.initial_dist  = initial_dist_;
+                if (rtp) ti.goal_dist = std::hypot(
+                    goal->x - float(rtp->T_odom_pelvis.translation.x()),
+                    goal->y - float(rtp->T_odom_pelvis.translation.y()));
+            }
+            NavTrace::instance().record(ti);
+        }
+
         std::this_thread::sleep_until(t0 + std::chrono::milliseconds(50));   // ~20 Hz control
     }
 }

@@ -12,6 +12,7 @@
 #include "lio/lio_receiver.hpp"
 #include "lio/lio_transform_producer.hpp"
 #include "localization/localization_filter.hpp"
+#include "localization/loc_sample.hpp"
 #include "localization/map_odom.hpp"
 #include "localization/relocalizer.hpp"
 #include "localization/uwb_receiver.hpp"
@@ -38,7 +39,8 @@ public:
                const std::string& prior_pcd, const std::string& sidecar,
                float map_uwb_yaw_rad, const Eigen::Vector3f& tag_in_pelvis,
                const Eigen::Matrix4f& fallback_seed, DataBuffer<MapOdom>& out,
-               const RelocConfig& rcfg = {}, const LocFilterConfig& fcfg = {});
+               const RelocConfig& rcfg = {}, const LocFilterConfig& fcfg = {},
+               DataBuffer<LocSample>* sample_out = nullptr);
     void stop();
 
     std::vector<float> prior_xyz() const { return reloc_.prior_xyz(); }   // map frame, for rviz overlay
@@ -56,6 +58,7 @@ private:
     LioTransformProducer* prod_ = nullptr;
     UwbReceiver*          uwb_  = nullptr;
     DataBuffer<MapOdom>*  out_  = nullptr;
+    DataBuffer<LocSample>* sample_out_ = nullptr;   // diagnostics snapshot (NavTrace); optional
 
     std::string     sidecar_;
     float           map_uwb_yaw_ = 0.f;

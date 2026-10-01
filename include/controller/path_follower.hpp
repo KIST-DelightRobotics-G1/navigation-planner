@@ -58,6 +58,8 @@ public:
     // catches a goal that jumps mid-run; it cannot tell that the robot left an unchanged goal.)
     void reset() { at_goal_ = false; have_last_ = false; }
 
+    bool at_goal() const { return at_goal_; }   // terminal latch state (diagnostics / trace)
+
 private:
     FollowConfig cfg_;
     bool  at_goal_   = false;   // latched terminal mode (align/approach/arrived)
