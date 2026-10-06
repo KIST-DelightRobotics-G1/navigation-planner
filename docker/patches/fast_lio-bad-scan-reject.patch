@@ -1,0 +1,105 @@
+--- a/src/laserMapping.cpp	2026-10-06 17:40:14.746732223 +0900
++++ b/src/laserMapping.cpp	2026-10-06 17:40:14.747732202 +0900
+@@ -90,6 +90,22 @@
+ 
+ double res_mean_last = 0.05, total_residual = 0.0;
+ double last_timestamp_lidar = 0, last_timestamp_imu = -1.0;
++
++// ── bad-scan rejection (divergence hardening) ──────────────────────────────────
++// A physically-impossible LiDAR correction (a fridge door / arm sweeping the near FOV during
++// manipulation) is ROLLED BACK instead of applied, and its scan is NOT inserted into the map, so a
++// transient bad scan cannot corrupt the estimator and diverge the odom. The pre-update (IMU-
++// predicted) state already contains this interval's real motion, so a large pre->post correction
++// means the LiDAR measurement disagrees with the IMU — the divergence signature. Sustained rejects
++// are counted + warned; the 360 deg MID360 keeps good static geometry (sides/rear) during a
++// front-FOV disturbance, so short disturbances ride through on IMU + the static majority.
++bool   reject_enable       = true;
++double reject_corr_pos_m   = 0.30;   // per-scan correction (pre->post) cap (m)
++double reject_corr_rot_rad = 0.20;   // per-scan correction cap (rad, ~11 deg)
++int    reject_min_feats    = 50;     // too few matched points -> degenerate scan
++double reject_max_res_m    = 0.50;   // mean point-to-plane residual cap (m)
++int    reject_warn_streak  = 10;     // warn every N consecutive rejects
++long   reject_total = 0, reject_streak = 0;
+ double gyr_cov = 0.1, acc_cov = 0.1, b_gyr_cov = 0.0001, b_acc_cov = 0.0001;
+ double filter_size_corner_min = 0, filter_size_surf_min = 0, filter_size_map_min = 0, fov_deg = 0;
+ double cube_len = 0, HALF_FOV_COS = 0, FOV_DEG = 0, total_distance = 0, lidar_end_time = 0, first_lidar_time = 0.0;
+@@ -845,6 +861,12 @@
+         this->declare_parameter<int>("point_filter_num", 2);
+         this->declare_parameter<bool>("feature_extract_enable", false);
+         this->declare_parameter<bool>("runtime_pos_log_enable", false);
++        this->declare_parameter<bool>("reject.enable", true);
++        this->declare_parameter<double>("reject.corr_pos_m", 0.30);
++        this->declare_parameter<double>("reject.corr_rot_rad", 0.20);
++        this->declare_parameter<int>("reject.min_feats", 50);
++        this->declare_parameter<double>("reject.max_res_m", 0.50);
++        this->declare_parameter<int>("reject.warn_streak", 10);
+         this->declare_parameter<bool>("mapping.extrinsic_est_en", true);
+         this->declare_parameter<bool>("pcd_save.pcd_save_en", false);
+         this->declare_parameter<int>("pcd_save.interval", -1);
+@@ -881,6 +903,12 @@
+         this->get_parameter_or<int>("point_filter_num", p_pre->point_filter_num, 2);
+         this->get_parameter_or<bool>("feature_extract_enable", p_pre->feature_enabled, false);
+         this->get_parameter_or<bool>("runtime_pos_log_enable", runtime_pos_log, 0);
++        this->get_parameter_or<bool>("reject.enable", reject_enable, true);
++        this->get_parameter_or<double>("reject.corr_pos_m", reject_corr_pos_m, 0.30);
++        this->get_parameter_or<double>("reject.corr_rot_rad", reject_corr_rot_rad, 0.20);
++        this->get_parameter_or<int>("reject.min_feats", reject_min_feats, 50);
++        this->get_parameter_or<double>("reject.max_res_m", reject_max_res_m, 0.50);
++        this->get_parameter_or<int>("reject.warn_streak", reject_warn_streak, 10);
+         this->get_parameter_or<bool>("mapping.extrinsic_est_en", extrinsic_est_en, true);
+         this->get_parameter_or<bool>("pcd_save.pcd_save_en", pcd_save_en, false);
+         this->get_parameter_or<int>("pcd_save.interval", pcd_save_interval, -1);
+@@ -1066,8 +1094,41 @@
+             /*** iterated state estimation ***/
+             double t_update_start = omp_get_wtime();
+             double solve_H_time = 0;
++            auto x_pre = kf.get_x();        // IMU-predicted state (pre LiDAR update)
++            auto P_pre = kf.get_P();
+             kf.update_iterated_dyn_share_modified(LASER_POINT_COV, solve_H_time);
+             state_point = kf.get_x();
++
++            // ── bad-scan rejection: roll back a physically-impossible LiDAR correction ──
++            bool scan_rejected = false;
++            if (reject_enable)
++            {
++                const double dpos = (state_point.pos - x_pre.pos).norm();
++                auto ca = x_pre.rot.coeffs();          // (x,y,z,w)
++                auto cb = state_point.rot.coeffs();
++                Eigen::Quaterniond qa(ca[3], ca[0], ca[1], ca[2]);
++                Eigen::Quaterniond qb(cb[3], cb[0], cb[1], cb[2]);
++                const double drot = qa.angularDistance(qb);
++                const bool bad = dpos > reject_corr_pos_m ||
++                                 drot > reject_corr_rot_rad ||
++                                 effct_feat_num < reject_min_feats ||
++                                 res_mean_last  > reject_max_res_m;
++                if (bad)
++                {
++                    kf.change_x(x_pre);                // undo the update (iterated — may have moved state)
++                    kf.change_P(P_pre);
++                    state_point = x_pre;               // publish/use the trusted IMU-predicted pose
++                    scan_rejected = true;
++                    reject_total++; reject_streak++;
++                    if (reject_streak == 1 || reject_streak % reject_warn_streak == 0)
++                        printf("[reject] bad scan: dpos=%.2fm drot=%.1fdeg feats=%d res=%.3f "
++                               "(streak=%ld total=%ld)\n",
++                               dpos, drot * 57.29578, effct_feat_num, res_mean_last,
++                               reject_streak, reject_total);
++                }
++                else reject_streak = 0;
++            }
++
+             euler_cur = SO3ToEuler(state_point.rot);
+             pos_lid = state_point.pos + state_point.rot * state_point.offset_T_L_I;
+             geoQuat.x = state_point.rot.coeffs()[0];
+@@ -1080,9 +1141,9 @@
+             /******* Publish odometry *******/
+             publish_odometry(pubOdomAftMapped_, tf_broadcaster_);
+ 
+-            /*** add the feature points to map kdtree ***/
++            /*** add the feature points to map kdtree (skip a rejected scan: don't pollute the map) ***/
+             t3 = omp_get_wtime();
+-            map_incremental();
++            if (!scan_rejected) map_incremental();
+             t5 = omp_get_wtime();
+ 
+             /******* Publish points *******/
