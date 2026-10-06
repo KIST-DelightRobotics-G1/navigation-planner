@@ -101,10 +101,11 @@ void LocalizationWorker::run() {
                 // ── GLOBAL-INIT: yaw-search -> seed the EKF on a confident/stable lock ──
                 if (n_scans >= 15 && have_odom && have_uwb) {
                     auto gr = reloc_.global_init(uwb_xy, tag_in_pelvis_, Tob);
-                    if (gr.ok) { ekf_.seed(gr.T_map_odom); phase = "LOCK(init)"; locked_.store(true); }
+                    // Don't publish a lock if a reinit was requested mid-cycle (would be stale).
+                    if (gr.ok && !reinit_req_.load()) { ekf_.seed(gr.T_map_odom); phase = "LOCK(init)"; locked_.store(true); }
                 } else if (n_scans >= 15 && !uwb_) {
                     ekf_.seed(fallback_seed_);            // no UWB configured -> fixed seed fallback
-                    phase = "LOCK(fixed-seed)"; locked_.store(true);
+                    phase = "LOCK(fixed-seed)"; if (!reinit_req_.load()) locked_.store(true);
                 }
             } else {
                 // ── TRACKING: EKF fuses GICP + UWB ──

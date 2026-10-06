@@ -20,8 +20,11 @@
 
 #include <Eigen/Dense>
 #include <chrono>
+#include <cstdint>
 #include <mutex>
 #include <optional>
+#include <string>
+#include <utility>
 
 namespace kist {
 
@@ -54,15 +57,18 @@ public:
 
     // A run is "pending" when there is a raw goal that has not been consumed (arrived/cancelled) —
     // independent of whether localization is ready yet (unlike active(), which hides a map goal until
-    // map->odom exists). Returns the goal's buffer write-time (a unique run id; a re-sent destination
-    // gets a newer time). The mission coordinator uses this to detect run start/end for the LIO
-    // lifecycle, BEFORE localization is up. nullopt = idle (no goal, or the current one is consumed).
-    std::optional<std::chrono::steady_clock::time_point> pending_run() const {
+    // map->odom exists). Returns the subtask identity (plan_id, index). The mission coordinator uses
+    // this to detect run start/end for the LIO lifecycle BEFORE localization is up; keying on the id
+    // (not the buffer time) means a destination re-sent several times (a 5x command burst) is ONE run
+    // and does not re-trigger the reinit. nullopt = idle (no goal, or the current one is consumed).
+    std::optional<std::pair<std::string, uint16_t>> pending_run() const {
         auto picked = pick_raw();
         if (!picked) return std::nullopt;
-        std::lock_guard<std::mutex> lk(mtx_);
-        if (consumed_ && picked->timestamp == consumed_ts_) return std::nullopt;
-        return picked->timestamp;
+        {
+            std::lock_guard<std::mutex> lk(mtx_);
+            if (consumed_ && picked->timestamp == consumed_ts_) return std::nullopt;
+        }
+        return std::make_pair(picked->data->plan_id, picked->data->index);
     }
 
     // The controller calls this once it has CONFIRMED arrival (debounced). It snapshots the active

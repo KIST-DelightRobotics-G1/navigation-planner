@@ -52,8 +52,15 @@ void PerceptionWorker::run() {
         last_acc = acc;
         const Transform T_lev = leveler_.T_leveled_odom();   // identity until locked
         leveled_buf_->SetData(T_lev);                        // share for viz + goal/controller
+        leveled_locked_.store(leveler_.locked());            // gate for "safe to drive" (coordinator)
 
-        mapper_.update_map(*scan, *rt, T_lev);        // grid built in the leveled frame
+        // Build the obstacle grid ONLY once the floor is gravity-aligned. Before the leveler locks,
+        // T_lev is identity (tilted raw odom) -> the floor rises into the obstacle band at range =
+        // false obstacles. Routing over that is unsafe, so we hold the grid (and driving) until the
+        // leveler locks, instead of accumulating tilted voxels that linger past the lock.
+        if (!leveler_.locked()) continue;
+
+        mapper_.update_map(*scan, *rt, T_lev);        // grid built in the (now gravity-leveled) frame
         grid_buf_->SetData(mapper_.grid());
         costmap_buf_->SetData(mapper_.costmap());
     }

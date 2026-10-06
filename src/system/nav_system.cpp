@@ -10,10 +10,13 @@
 #include <chrono>
 #include <cmath>
 #include <csignal>
+#include <cstdint>
 #include <cstdlib>
 #include <iostream>
 #include <optional>
+#include <string>
 #include <thread>
+#include <utility>
 #include <string>
 
 namespace kist {
@@ -185,7 +188,7 @@ bool NavSystem::start(const std::string& config_path) {
 //   localized-> ready=true (controller drives); timeout -> localize_failed (controller reports FAILED)
 //   run ends -> stop LIO, close the gate
 void NavSystem::coordinator_loop() {
-    std::optional<std::chrono::steady_clock::time_point> cur_run;   // id of the run being served
+    std::optional<std::pair<std::string, uint16_t>> cur_run;   // (plan_id, index) of the served run
     bool was_pending = false;
     auto run_start = std::chrono::steady_clock::now();
     const double timeout_s = lio_mgr_.config().ready_timeout_s;
@@ -195,6 +198,9 @@ void NavSystem::coordinator_loop() {
         const bool pending = pend.has_value();
         const auto now = std::chrono::steady_clock::now();
 
+        // New run = a goal just became pending, or a DIFFERENT subtask id (not a re-send of the same
+        // one — a 5x command burst is one run). request_reinit/reset drop the locks SYNCHRONOUSLY, so
+        // the ready check below won't see a stale lock from the previous run.
         if (pending && (!was_pending || *pend != *cur_run)) {        // new run
             cur_run = pend;
             localize_failed_.store(false);
@@ -207,13 +213,17 @@ void NavSystem::coordinator_loop() {
         }
 
         if (pending && !ready_to_drive_.load() && !localize_failed_.load()) {
-            if (loc_.locked()) {
+            // Drive only once BOTH are freshly re-established: map->odom (localization) AND the
+            // gravity-leveled obstacle grid (ground leveler). Driving on a tilted pre-lock grid
+            // routes over false obstacles -> no path. (Strict: no identity-grid fallback.)
+            if (loc_.locked() && perc_.leveled_locked()) {
                 ready_to_drive_.store(true);
-                std::cout << "[coordinator] re-localized -> cleared to drive\n";
+                std::cout << "[coordinator] re-localized + leveled -> cleared to drive\n";
             } else if (std::chrono::duration<double>(now - run_start).count() > timeout_s) {
                 localize_failed_.store(true);
-                std::cerr << "[coordinator] relocalization timed out (" << timeout_s
-                          << " s) -> FAILED\n";
+                std::cerr << "[coordinator] localize/level timed out (" << timeout_s
+                          << " s; loc=" << loc_.locked() << " lvl=" << perc_.leveled_locked()
+                          << ") -> FAILED\n";
             }
         }
 

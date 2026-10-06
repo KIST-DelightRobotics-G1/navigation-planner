@@ -45,8 +45,10 @@ public:
 
     // Episodic-LIO support: drop the current lock + accumulated submap and re-run global_init from
     // scratch. Call when a fresh LIO session starts (odom origin redefined). Thread-safe (flag).
-    void request_reinit() { reinit_req_.store(true); }
-    bool locked() const { return locked_.load(); }   // map->odom currently established?
+    // Drop the lock SYNCHRONOUSLY (so a coordinator polling locked() right after never sees the
+    // stale previous lock), and flag the worker to clear the submap + re-run global_init.
+    void request_reinit() { locked_.store(false); reinit_req_.store(true); }
+    bool locked() const { return locked_.load(); }   // map->odom currently established (fresh)?
 
     std::vector<float> prior_xyz() const { return reloc_.prior_xyz(); }   // map frame, for rviz overlay
 
