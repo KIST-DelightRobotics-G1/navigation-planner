@@ -111,6 +111,14 @@ void Relocalizer::add_scan(const LioCloud& scan) {
     impl_->submap_dirty = true;
 }
 
+void Relocalizer::clear_submap() {
+    impl_->scans.clear();
+    impl_->submap->clear();
+    impl_->submap_score->clear();
+    impl_->submap_dirty = false;
+    recent_best_yaws_.clear();            // stale yaw-stability history from the old session
+}
+
 std::size_t Relocalizer::submap_size() const { return impl_->submap->size(); }
 std::size_t Relocalizer::prior_size()  const { return impl_->prior->size(); }
 

@@ -177,6 +177,7 @@ endif()
 # runs the perception / planner / viz threads. The kist-navigation-planner binary runs this.
 add_library(nav_system STATIC
     src/system/nav_system.cpp
+    src/system/lio_process_manager.cpp                    # episodic LIO: start/stop the engine per goal
     src/common/console_tee.cpp                            # run logging: console mirror (logs/latest.log)
     src/common/nav_trace.cpp                              # run logging: per-tick trace (logs/latest.trace)
     src/route_planner/perception/perception_worker.cpp   # workers live in their domain folders,

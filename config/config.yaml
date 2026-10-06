@@ -43,6 +43,20 @@ localization:
   max_jump_m: 1.0        # reject a correction translating map->odom more than this (m)
   max_yaw_deg: 30        # reject a solution >this many deg from the seed heading (kills 180deg flips)
 
+# Episodic LIO: nav runs the LIO engine (Livox driver + FAST-LIO) ONLY while driving to a goal, and
+# stops it when idle. VLA manipulation (opening a fridge, etc.) happens while idle — with LIO off,
+# the moving door/arm can't corrupt FAST-LIO's scan matching (which otherwise diverges). Each goal
+# gets a fresh estimator; nav holds (no motion) until it re-localizes against the prior map.
+#   manage: false (default) = LIO is run externally (run_lio_daemon), continuously — same as before.
+#   manage: true            = nav starts/stops LIO per goal (the C++ equivalent of run_lio_daemon).
+lio:
+  manage: false
+  ros_setup:   /opt/ros/humble/setup.bash
+  ws_setup:    /opt/lio_ws/install/setup.bash
+  launch_file: /workspace/kist-navigation-planner/lio_engine/lio_bringup.launch.py
+  log_file:    /tmp/lio_engine.log
+  ready_timeout_s: 20.0        # give up re-localizing a fresh LIO after this -> report FAILED
+
 # Navigation runtime toggles (moved off env vars; edit here + restart).
 navigation:
   drive: false    # false = preview (no Twist published; robot will NOT move).

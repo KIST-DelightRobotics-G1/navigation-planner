@@ -34,6 +34,13 @@ public:
     const ObstacleGrid& grid()    const { return grid_; }
     const Costmap&      costmap() const { return costmap_; }
 
+    // Drop all accumulated state so the next update_map() rebuilds from scratch. Call when the odom
+    // frame is redefined (a fresh LIO session has a new origin), so stale voxels don't linger.
+    void reset() {
+        grid_ready_ = false; floor_init_ = false; floor_z_ema_ = 0.0f;
+        grid_ = ObstacleGrid{}; costmap_ = Costmap{};
+    }
+
 private:
     ObstacleVoxelGrid vgrid_;      // rolling accumulator (stateful)
     CostmapBuilder    cb_;

@@ -7,10 +7,13 @@
 #include "unitree/unitree_state_reader.hpp"
 
 #include <Eigen/Geometry>
+#include <chrono>
 #include <cmath>
 #include <csignal>
 #include <cstdlib>
 #include <iostream>
+#include <optional>
+#include <thread>
 #include <string>
 
 namespace kist {
@@ -75,6 +78,23 @@ bool NavSystem::start(const std::string& config_path) {
         survey        = nav["survey"].as<bool>(false);
     }
 
+    // Episodic-LIO (lio.manage): nav runs the LIO engine only while driving to a goal, so VLA
+    // manipulation (which happens while idle) cannot corrupt FAST-LIO. Default off -> LIO is run
+    // externally (run_lio_daemon) and runs continuously, exactly as before.
+    {
+        LioProcessConfig lc;
+        if (const auto lio = root["lio"]) {
+            lc.manage      = lio["manage"].as<bool>(lc.manage);
+            lc.ros_setup   = lio["ros_setup"].as<std::string>(lc.ros_setup);
+            lc.ws_setup    = lio["ws_setup"].as<std::string>(lc.ws_setup);
+            lc.launch_file = lio["launch_file"].as<std::string>(lc.launch_file);
+            lc.log_file    = lio["log_file"].as<std::string>(lc.log_file);
+            lc.ready_timeout_s = lio["ready_timeout_s"].as<double>(lc.ready_timeout_s);
+        }
+        lio_mgr_.configure(lc);
+        ready_to_drive_.store(!lc.manage);   // managed: hold until the first goal re-localizes
+    }
+
     // UWB (localization seed only). Non-fatal: no UWB -> the config fixed seed is used.
     if (uwb_.start(domain)) uwb_started_ = true;
     else std::cerr << "[NavSystem] UWB receiver failed — localization seed uses config fallback\n";
@@ -123,9 +143,19 @@ bool NavSystem::start(const std::string& config_path) {
     perc_.start(rx_, prod_, grid_buf_, costmap_buf_, leveled_buf_);
     plan_.start(costmap_buf_, goal_src_, path_buf_);
     ctrl_.start(path_buf_, prod_, costmap_buf_, goal_src_, cmd_buf_, cmd_pub_, status_pub_,
-                leveled_buf_, drive_enabled, fc, arrival_hold_s, nopath_hold_s);
+                leveled_buf_, drive_enabled, fc, arrival_hold_s, nopath_hold_s,
+                &ready_to_drive_, &localize_failed_);
     viz_.start(grid_buf_, costmap_buf_, path_buf_, pub_, perc_.gcfg(), prod_, rx_, mapodom_buf_,
                leveled_buf_, survey, loc_.prior_xyz());   // + T_leveled_odom for rt/leveled_cloud
+
+    // Episodic-LIO coordinator: only when nav manages LIO. Otherwise LIO runs continuously and the
+    // gates stay open (ready_to_drive_ = true) — identical to the previous behavior.
+    if (lio_mgr_.config().manage) {
+        coord_running_ = true;
+        coord_thread_  = std::thread(&NavSystem::coordinator_loop, this);
+        std::cout << "  *** lio.manage: true — nav starts/stops the LIO engine per goal "
+                     "(off while idle). ***\n";
+    }
 
     // Per-tick numeric trace (logs/latest.trace) — a pure observer of the buffers above, filled by
     // the controller thread (zero I/O there; a background thread writes). Default on.
@@ -149,8 +179,61 @@ bool NavSystem::start(const std::string& config_path) {
     return true;
 }
 
+// Episodic-LIO mission coordinator (runs only when lio.manage). Detects run start/end from the
+// goal (pending_run, independent of localization) and drives the LIO lifecycle + the ready gate:
+//   new run  -> start LIO, reinit localization + perception, hold (ready=false) until re-localized
+//   localized-> ready=true (controller drives); timeout -> localize_failed (controller reports FAILED)
+//   run ends -> stop LIO, close the gate
+void NavSystem::coordinator_loop() {
+    std::optional<std::chrono::steady_clock::time_point> cur_run;   // id of the run being served
+    bool was_pending = false;
+    auto run_start = std::chrono::steady_clock::now();
+    const double timeout_s = lio_mgr_.config().ready_timeout_s;
+
+    while (coord_running_.load()) {
+        const auto pend = goal_src_.pending_run();
+        const bool pending = pend.has_value();
+        const auto now = std::chrono::steady_clock::now();
+
+        if (pending && (!was_pending || *pend != *cur_run)) {        // new run
+            cur_run = pend;
+            localize_failed_.store(false);
+            ready_to_drive_.store(false);
+            lio_mgr_.start();                                        // fresh LIO engine
+            loc_.request_reinit();                                  // drop lock + submap -> re-localize
+            perc_.request_reset();                                  // clear grid + re-estimate tilt
+            run_start = now;
+            std::cout << "[coordinator] new run -> LIO start + localization/perception reinit\n";
+        }
+
+        if (pending && !ready_to_drive_.load() && !localize_failed_.load()) {
+            if (loc_.locked()) {
+                ready_to_drive_.store(true);
+                std::cout << "[coordinator] re-localized -> cleared to drive\n";
+            } else if (std::chrono::duration<double>(now - run_start).count() > timeout_s) {
+                localize_failed_.store(true);
+                std::cerr << "[coordinator] relocalization timed out (" << timeout_s
+                          << " s) -> FAILED\n";
+            }
+        }
+
+        if (!pending && was_pending) {                              // run ended (arrived / cancelled)
+            lio_mgr_.stop();
+            ready_to_drive_.store(false);
+            localize_failed_.store(false);
+            std::cout << "[coordinator] run ended -> LIO stop (idle; safe for manipulation)\n";
+        }
+
+        was_pending = pending;
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));   // 10 Hz
+    }
+}
+
 void NavSystem::stop() {
-    // Workers first — they reference the readers/publishers/buffers below.
+    // Coordinator first (it may start/stop LIO); then workers.
+    if (coord_running_.exchange(false) && coord_thread_.joinable()) coord_thread_.join();
+    lio_mgr_.stop();                 // ensure the managed LIO engine is down
+    // Workers next — they reference the readers/publishers/buffers below.
     viz_.stop();
     ctrl_.stop();
     plan_.stop();

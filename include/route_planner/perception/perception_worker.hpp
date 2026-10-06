@@ -29,6 +29,10 @@ public:
 
     const ObstacleGridConfig& gcfg() const { return mapper_.gcfg; }   // for viz (resolution/band)
 
+    // Fresh LIO session (odom origin redefined): drop the accumulated grid + re-estimate the floor
+    // tilt. Thread-safe (flag, applied at the top of the run loop).
+    void request_reset() { reset_req_.store(true); }
+
 private:
     void run();
 
@@ -42,6 +46,7 @@ private:
 
     std::thread       thread_;
     std::atomic<bool> running_{false};
+    std::atomic<bool> reset_req_{false};   // fresh LIO: clear grid + re-lock the ground leveler
 };
 
 } // namespace kist

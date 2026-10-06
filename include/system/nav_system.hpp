@@ -32,10 +32,13 @@
 #include "route_planner/planner/planner_worker.hpp"
 #include "controller/controller_worker.hpp"
 #include "system/goal_source.hpp"
+#include "system/lio_process_manager.hpp"
 #include "system/viz_worker.hpp"
 
 #include <atomic>
+#include <optional>
 #include <string>
+#include <thread>
 
 namespace kist {
 
@@ -80,6 +83,17 @@ private:
     PlannerWorker      plan_;
     ControllerWorker   ctrl_;
     VizWorker          viz_;
+
+    // ── episodic-LIO mission coordinator (optional; lio.manage) ──
+    // Runs LIO only while driving to a goal (off during idle/manipulation, so manipulation geometry
+    // can't corrupt FAST-LIO). On each run: start LIO -> reinit localization + perception -> hold
+    // until re-localized -> drive; on arrival/cancel: stop LIO. See coordinator_loop().
+    LioProcessManager  lio_mgr_;
+    std::atomic<bool>  ready_to_drive_{true};    // controller may drive (localized); false while managing
+    std::atomic<bool>  localize_failed_{false};  // fresh LIO failed to re-localize within the timeout
+    std::thread        coord_thread_;
+    std::atomic<bool>  coord_running_{false};
+    void coordinator_loop();
 
     std::atomic<bool> quit_{false};
 

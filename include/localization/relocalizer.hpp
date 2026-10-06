@@ -87,6 +87,7 @@ public:
     const RelocConfig& config() const { return cfg_; }
 
     void        add_scan(const LioCloud& scan);      // accumulate into the rolling submap (odom)
+    void        clear_submap();                      // drop all accumulated scans (fresh LIO session)
     std::size_t submap_size() const;                 // downsampled submap point count
     std::size_t prior_size()  const;                 // downsampled prior-map point count
 

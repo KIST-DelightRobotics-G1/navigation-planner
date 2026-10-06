@@ -24,6 +24,13 @@ void PerceptionWorker::run() {
     int64_t last_stamp = 0;
     int     last_acc   = -1;
     while (running_) {
+        if (reset_req_.exchange(false)) {      // fresh LIO session: drop grid + re-estimate tilt
+            mapper_.reset();
+            leveler_.reset();
+            last_acc = -1;
+            std::printf("[perception] reset — grid cleared, ground leveler re-estimating\n");
+        }
+
         auto scan = rx_->cloud_buf.GetData();
         if (!scan || scan->stamp_ns == last_stamp) {
             std::this_thread::sleep_for(std::chrono::milliseconds(5));

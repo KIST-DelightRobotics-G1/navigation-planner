@@ -72,6 +72,14 @@ void LocalizationWorker::run() {
     auto    last_step  = std::chrono::steady_clock::now();
     std::string last_phase_printed;               // console prints only on a phase change
     while (running_) {
+        if (reinit_req_.exchange(false)) {        // fresh LIO session: drop everything, re-localize
+            ekf_.reset();                         // seeded_ = false -> global_init re-runs
+            reloc_.clear_submap();
+            n_scans = 0; lost_count = 0; last_stamp = 0;
+            locked_.store(false);
+            std::printf("[localization] reinit requested — dropping lock + submap\n");
+        }
+
         auto cloud = rx_->cloud_buf.GetData();
         if (cloud && cloud->stamp_ns != last_stamp) {
             last_stamp = cloud->stamp_ns;
@@ -93,10 +101,10 @@ void LocalizationWorker::run() {
                 // ── GLOBAL-INIT: yaw-search -> seed the EKF on a confident/stable lock ──
                 if (n_scans >= 15 && have_odom && have_uwb) {
                     auto gr = reloc_.global_init(uwb_xy, tag_in_pelvis_, Tob);
-                    if (gr.ok) { ekf_.seed(gr.T_map_odom); phase = "LOCK(init)"; }
+                    if (gr.ok) { ekf_.seed(gr.T_map_odom); phase = "LOCK(init)"; locked_.store(true); }
                 } else if (n_scans >= 15 && !uwb_) {
                     ekf_.seed(fallback_seed_);            // no UWB configured -> fixed seed fallback
-                    phase = "LOCK(fixed-seed)";
+                    phase = "LOCK(fixed-seed)"; locked_.store(true);
                 }
             } else {
                 // ── TRACKING: EKF fuses GICP + UWB ──
@@ -110,7 +118,7 @@ void LocalizationWorker::run() {
                     // Reset only on SUSTAINED disagreement — a single UWB jitter spike is ignored
                     // (its update was already gated out; one spike must not drop the lock).
                     if (lost) {
-                        if (++lost_count >= kLostFrames) { ekf_.reset(); lost_count = 0; phase = "LOST->reinit"; }
+                        if (++lost_count >= kLostFrames) { ekf_.reset(); lost_count = 0; phase = "LOST->reinit"; locked_.store(false); }
                         else phase = "track(uwb-spike)";
                     } else {
                         lost_count = 0;

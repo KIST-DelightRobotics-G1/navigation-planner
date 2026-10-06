@@ -14,9 +14,12 @@ void ControllerWorker::start(DataBuffer<Path>& path_buf, LioTransformProducer& p
                              DataBuffer<NavCommand>& cmd_buf, NavCommandPublisher& pub,
                              SubtaskStatePublisher& status_pub, DataBuffer<Transform>& leveled_buf,
                              bool drive_enabled, const FollowConfig& fc,
-                             double arrival_hold_s, double nopath_hold_s) {
+                             double arrival_hold_s, double nopath_hold_s,
+                             const std::atomic<bool>* ready_to_drive,
+                             const std::atomic<bool>* localize_failed) {
     path_buf_ = &path_buf; prod_ = &prod; costmap_buf_ = &costmap_buf; goals_ = &goals;
     cmd_buf_ = &cmd_buf; pub_ = &pub; status_pub_ = &status_pub; leveled_buf_ = &leveled_buf;
+    ready_to_drive_ = ready_to_drive; localize_failed_ = localize_failed;
     drive_enabled_ = drive_enabled;
     arrival_hold_s_ = arrival_hold_s; nopath_hold_s_ = nopath_hold_s;
     ctrl_.set_config(fc);
@@ -151,17 +154,38 @@ void ControllerWorker::run() {
         }
         was_active_ = goal_active;
 
+        // Episodic-LIO gates: a goal may be pending before a fresh LIO has re-localized. Hold (no
+        // drive) until ready; report FAILED if relocalization gave up. No-op when not managed (the
+        // pointers are null / stay true) -> continuous-LIO behavior is unchanged.
+        const bool ready   = (ready_to_drive_  == nullptr) || ready_to_drive_->load();
+        const bool locfail = (localize_failed_ != nullptr) && localize_failed_->load();
+        const bool run_pending = goals_->pending_run().has_value();
+        const bool holding = run_pending && !ready && !locfail;   // waiting for localization
+
         FollowPhase phase = FollowPhase::Arrived;
-        NavCommand  cmd   = ctrl_.step(path, rtp, cm.get(), goal ? &*goal : nullptr, &phase);
+        NavCommand  cmd{};
+        if (ready && !locfail)
+            cmd = ctrl_.step(path, rtp, cm.get(), goal ? &*goal : nullptr, &phase);
+        // else: hold at zero velocity (do NOT act on an unlocalized / failed pose)
 
         cmd_buf_->SetData(cmd);
-        if (drive_enabled_) pub_->publish(cmd);              // Twist -> gearsonic (robot moves), ~20 Hz
+        if (drive_enabled_ && ready && !locfail) pub_->publish(cmd);   // never drive while not localized
 
         SubtaskReport rep;
         if (t0 - last_status >= std::chrono::milliseconds(100)) {   // status FSM + publish @ 10 Hz
             const double dt = std::chrono::duration<double>(t0 - last_status).count();
             last_status = t0;
-            rep = step_status(goal, rtp, phase, dt);
+            if (run_pending && locfail && goal) {                  // fresh LIO failed to re-localize
+                rep = SubtaskReport{}; rep.status = SubtaskStatus::Failed; rep.detail = "localization failed";
+                rep.plan_id = goal->plan_id; rep.index = goal->index; rep.action = goal->action;
+                arrival_hold_ = nopath_hold_ = 0.0; have_cur_ = false;
+            } else if (holding && goal) {                          // waiting for a fresh LIO to localize
+                rep = SubtaskReport{}; rep.status = SubtaskStatus::Running; rep.detail = "localizing";
+                rep.plan_id = goal->plan_id; rep.index = goal->index; rep.action = goal->action;
+                arrival_hold_ = nopath_hold_ = 0.0; have_cur_ = false;
+            } else {
+                rep = step_status(goal, rtp, phase, dt);
+            }
             last_status_ = rep.status; last_progress_ = rep.progress;   // held for the 20 Hz trace
             status_pub_->publish(rep.plan_id, rep.index, rep.action, rep.status, rep.progress, rep.detail);
 

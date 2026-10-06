@@ -52,6 +52,19 @@ public:
         return level(goal_to_odom(g, *mo));               // odom -> leveled (same frame as the grid)
     }
 
+    // A run is "pending" when there is a raw goal that has not been consumed (arrived/cancelled) —
+    // independent of whether localization is ready yet (unlike active(), which hides a map goal until
+    // map->odom exists). Returns the goal's buffer write-time (a unique run id; a re-sent destination
+    // gets a newer time). The mission coordinator uses this to detect run start/end for the LIO
+    // lifecycle, BEFORE localization is up. nullopt = idle (no goal, or the current one is consumed).
+    std::optional<std::chrono::steady_clock::time_point> pending_run() const {
+        auto picked = pick_raw();
+        if (!picked) return std::nullopt;
+        std::lock_guard<std::mutex> lk(mtx_);
+        if (consumed_ && picked->timestamp == consumed_ts_) return std::nullopt;
+        return picked->timestamp;
+    }
+
     // The controller calls this once it has CONFIRMED arrival (debounced). It snapshots the active
     // goal's buffer write-time; active() then reports idle until a newer sample / different goal.
     void notify_arrived() {

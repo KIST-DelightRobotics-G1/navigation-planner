@@ -35,7 +35,9 @@ public:
                GoalSource& goals, DataBuffer<NavCommand>& cmd_buf, NavCommandPublisher& pub,
                SubtaskStatePublisher& status_pub, DataBuffer<Transform>& leveled_buf,
                bool drive_enabled, const FollowConfig& fc,
-               double arrival_hold_s = 1.0, double nopath_hold_s = 4.0);
+               double arrival_hold_s = 1.0, double nopath_hold_s = 4.0,
+               const std::atomic<bool>* ready_to_drive = nullptr,   // episodic LIO: localized gate
+               const std::atomic<bool>* localize_failed = nullptr); // episodic LIO: relocalize timeout
     void stop();
 
 private:
@@ -65,6 +67,8 @@ private:
     NavCommandPublisher*     pub_         = nullptr;
     SubtaskStatePublisher*   status_pub_  = nullptr;
     DataBuffer<Transform>*   leveled_buf_ = nullptr;   // T_leveled_odom (odom -> planner frame)
+    const std::atomic<bool>* ready_to_drive_  = nullptr;  // episodic LIO: localized + safe to drive
+    const std::atomic<bool>* localize_failed_ = nullptr;  // episodic LIO: relocalization gave up
     bool                     drive_enabled_ = false;
     double                   arrival_hold_s_ = 1.0;
     double                   nopath_hold_s_  = 4.0;
