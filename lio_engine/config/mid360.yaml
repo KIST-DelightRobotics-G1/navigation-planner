@@ -9,16 +9,10 @@
     runtime_pos_log_enable: false
     map_file_path: "./test.pcd"
 
-    # Bad-scan rejection (divergence hardening, vendored FAST_LIO patch). A LiDAR correction larger
-    # than physically possible in one scan (a moving fridge door / arm in the near FOV) is rolled
-    # back and its scan is NOT inserted into the map, so a transient bad scan can't diverge the odom.
-    reject:
-      enable: true
-      corr_pos_m: 0.30      # per-scan position correction cap (m); above -> reject
-      corr_rot_rad: 0.20    # per-scan rotation correction cap (rad, ~11 deg)
-      min_feats: 50         # fewer matched points than this -> reject (degenerate)
-      max_res_m: 0.50       # mean point-to-plane residual cap (m)
-      warn_streak: 10       # warn every N consecutive rejects
+    # NOTE: the hard bad-scan reject (reject.* params) was ABANDONED — on-robot logs showed it caused
+    # the divergence it meant to prevent (min_feats false-rejected good scans -> frozen map -> runaway).
+    # FAST_LIO now runs pristine + a log-only metrics patch (docker/patches/fast_lio-metrics-log.patch).
+    # If adaptive measurement covariance is added later, its params would live here.
 
     common:
       lid_topic: "/livox/lidar"       # our driver publishes CustomMsg here (not /livox/custom_msg)

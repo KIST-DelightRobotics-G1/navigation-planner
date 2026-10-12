@@ -32,19 +32,20 @@ RUN git clone https://github.com/Livox-SDK/Livox-SDK2.git /tmp/livox-sdk2 && \
 
 # ─── LIO engine: deepglint FAST-LIO (humble) + livox driver, cloned + our patch ───────
 # Deps are cloned at build time (pinned), nothing vendored host-side (gearsonic convention). Our
-# only change is FAST_LIO's bad-scan rejection, kept as a small patch (docker/patches/) applied on
-# top of the pinned upstream — so the diff is tracked without carrying the whole source in-repo.
+# only change is a LOG-ONLY instrumentation of FAST_LIO (per-scan measurement metrics for adaptive-R
+# design — the hard bad-scan reject was abandoned: it caused the divergence it was meant to prevent).
+# Kept as a small patch (docker/patches/) on top of the pinned upstream — diff tracked, source not.
 # Build the driver first (FAST_LIO needs its CustomMsg). The clone is build-time only.
 ARG DEEPGLINT_FASTLIO_COMMIT=df4772ec4797172430e7efe990711d09a529f4ad
 ARG DEEPGLINT_DRIVER_COMMIT=e4234d4e559548bfe0afdf407990bfb206e183c0
-COPY docker/patches/fast_lio-bad-scan-reject.patch /tmp/fast_lio-bad-scan-reject.patch
+COPY docker/patches/fast_lio-metrics-log.patch /tmp/fast_lio-metrics-log.patch
 RUN mkdir -p /opt/lio_ws/src && \
     git clone https://github.com/deepglint/FAST_LIO_LOCALIZATION_HUMANOID.git /tmp/dg && \
     git -C /tmp/dg checkout "${DEEPGLINT_DRIVER_COMMIT}" && \
     cp -r /tmp/dg/livox_ros_driver2 /opt/lio_ws/src/ && \
     git -C /tmp/dg checkout "${DEEPGLINT_FASTLIO_COMMIT}" && \
     cp -r /tmp/dg/FAST_LIO /opt/lio_ws/src/fast_lio && \
-    patch -p1 -d /opt/lio_ws/src/fast_lio < /tmp/fast_lio-bad-scan-reject.patch && \
+    patch -p1 -d /opt/lio_ws/src/fast_lio < /tmp/fast_lio-metrics-log.patch && \
     rm -rf /tmp/dg && \
     bash -c 'source /opt/ros/humble/setup.bash && cd /opt/lio_ws && \
              bash ./src/livox_ros_driver2/build.sh humble && \
