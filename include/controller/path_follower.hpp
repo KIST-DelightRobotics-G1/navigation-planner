@@ -18,10 +18,10 @@
 namespace kist {
 
 struct FollowConfig {
-    double v_max         = 0.35;   // m/s cruise speed
+    double v_max         = 0.27;   // m/s cruise speed (lowered from 0.35 — gentler drive)
     double min_speed_m   = 0.20;   // controller floor: a nonzero translate command is bumped up
                                    // to this (the loco stack ignores speeds below ~0.2 m/s)
-    double vyaw_max      = 0.8;    // rad/s max turn rate
+    double vyaw_max      = 0.5;    // rad/s max turn rate (~28.6 deg/s; lowered from 0.8 — gentler turns)
     double lookahead_m   = 0.4;    // pure-pursuit lookahead distance
     double arrival_tol_m = 0.20;   // within this of the goal -> stop translating, align yaw
     double yaw_tol_rad   = 0.087;  // ~5 deg; within this of the goal yaw -> arrived (stop)
