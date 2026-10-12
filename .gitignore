@@ -78,8 +78,10 @@ test/bags/
 # Claude Code
 CLAUDE.md
 
-# vendored
-thirdparty/unitree_sdk2/
+# thirdparty deps are cloned/built at image-build time (gearsonic convention) — not vendored
+# host-side. Only picosha2 (header-only) lives in the repo.
+thirdparty/*
+!thirdparty/picosha2/
 build/
 
 # runtime state (persisted yaw bias, etc.)

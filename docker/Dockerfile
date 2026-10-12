@@ -17,7 +17,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # ─── build tools + deps (planner: yaml-cpp/eigen; engine: pcl + ros pcl_ros) ───
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential cmake git ca-certificates wget \
+    build-essential cmake git ca-certificates wget patch \
     libyaml-cpp-dev libeigen3-dev \
     libpcl-dev ros-humble-pcl-ros \
     ros-humble-rviz2 \
@@ -30,19 +30,22 @@ RUN git clone https://github.com/Livox-SDK/Livox-SDK2.git /tmp/livox-sdk2 && \
     cmake --build /tmp/livox-sdk2/build --target install -j"$(nproc)" && \
     rm -rf /tmp/livox-sdk2
 
-# ─── LIO engine: deepglint FAST-LIO (humble) + modified livox_ros_driver2 (main) ─
-# The working setup spans two branches (docs/LIO_ENGINE.md): the ROS2 FAST_LIO lives on
-# `humble`, the IMU-roll-fixed driver on `main`. Clone once, copy each package from its
-# pinned commit into one colcon workspace, then build (driver first — FAST_LIO needs its
-# CustomMsg). The 640 MB clone is build-time only; nothing is vendored into the repo.
+# ─── LIO engine: deepglint FAST-LIO (humble) + livox driver, cloned + our patch ───────
+# Deps are cloned at build time (pinned), nothing vendored host-side (gearsonic convention). Our
+# only change is a LOG-ONLY instrumentation of FAST_LIO (per-scan measurement metrics for adaptive-R
+# design — the hard bad-scan reject was abandoned: it caused the divergence it was meant to prevent).
+# Kept as a small patch (docker/patches/) on top of the pinned upstream — diff tracked, source not.
+# Build the driver first (FAST_LIO needs its CustomMsg). The clone is build-time only.
 ARG DEEPGLINT_FASTLIO_COMMIT=df4772ec4797172430e7efe990711d09a529f4ad
 ARG DEEPGLINT_DRIVER_COMMIT=e4234d4e559548bfe0afdf407990bfb206e183c0
+COPY docker/patches/fast_lio-metrics-log.patch /tmp/fast_lio-metrics-log.patch
 RUN mkdir -p /opt/lio_ws/src && \
     git clone https://github.com/deepglint/FAST_LIO_LOCALIZATION_HUMANOID.git /tmp/dg && \
     git -C /tmp/dg checkout "${DEEPGLINT_DRIVER_COMMIT}" && \
     cp -r /tmp/dg/livox_ros_driver2 /opt/lio_ws/src/ && \
     git -C /tmp/dg checkout "${DEEPGLINT_FASTLIO_COMMIT}" && \
     cp -r /tmp/dg/FAST_LIO /opt/lio_ws/src/fast_lio && \
+    patch -p1 -d /opt/lio_ws/src/fast_lio < /tmp/fast_lio-metrics-log.patch && \
     rm -rf /tmp/dg && \
     bash -c 'source /opt/ros/humble/setup.bash && cd /opt/lio_ws && \
              bash ./src/livox_ros_driver2/build.sh humble && \

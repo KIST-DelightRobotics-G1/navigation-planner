@@ -9,6 +9,11 @@
     runtime_pos_log_enable: false
     map_file_path: "./test.pcd"
 
+    # NOTE: the hard bad-scan reject (reject.* params) was ABANDONED — on-robot logs showed it caused
+    # the divergence it meant to prevent (min_feats false-rejected good scans -> frozen map -> runaway).
+    # FAST_LIO now runs pristine + a log-only metrics patch (docker/patches/fast_lio-metrics-log.patch).
+    # If adaptive measurement covariance is added later, its params would live here.
+
     common:
       lid_topic: "/livox/lidar"       # our driver publishes CustomMsg here (not /livox/custom_msg)
       imu_topic: "/livox/imu"

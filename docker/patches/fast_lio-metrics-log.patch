@@ -1,0 +1,30 @@
+--- a/src/laserMapping.cpp	2026-10-12 15:12:40.899121538 +0900
++++ b/src/laserMapping.cpp	2026-10-12 15:12:40.900121527 +0900
+@@ -1066,8 +1066,27 @@
+             /*** iterated state estimation ***/
+             double t_update_start = omp_get_wtime();
+             double solve_H_time = 0;
++            auto x_pre = kf.get_x();        // IMU-predicted state (pre LiDAR update) — for correction metrics
+             kf.update_iterated_dyn_share_modified(LASER_POINT_COV, solve_H_time);
+             state_point = kf.get_x();
++
++            // ── diagnostic instrumentation (LOG-ONLY, no behavior change) ──────────────────────────
++            // Pristine FAST-LIO + one printf per scan. Dumps the measurement-side signals so we can
++            // design adaptive R (soft down-weighting) from real manipulation data: the pre->post pose
++            // correction (dpos/drot), the matched-feature count, and the mean point-to-plane residual.
++            // NO rollback, NO rejection — the estimator runs exactly as upstream. Grep "[lio_metrics]".
++            {
++                const double dpos = (state_point.pos - x_pre.pos).norm();
++                auto ca = x_pre.rot.coeffs();          // (x,y,z,w)
++                auto cb = state_point.rot.coeffs();
++                Eigen::Quaterniond qa(ca[3], ca[0], ca[1], ca[2]);
++                Eigen::Quaterniond qb(cb[3], cb[0], cb[1], cb[2]);
++                const double drot = qa.angularDistance(qb) * 57.29578;   // deg
++                printf("[lio_metrics] t=%.3f dpos=%.4f drot=%.4f feats=%d res=%.4f vel=%.3f\n",
++                       Measures.lidar_beg_time - first_lidar_time, dpos, drot,
++                       effct_feat_num, res_mean_last, state_point.vel.norm());
++            }
++
+             euler_cur = SO3ToEuler(state_point.rot);
+             pos_lid = state_point.pos + state_point.rot * state_point.offset_T_L_I;
+             geoQuat.x = state_point.rot.coeffs()[0];
