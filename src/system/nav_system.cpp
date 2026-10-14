@@ -56,10 +56,17 @@ bool NavSystem::start(const std::string& config_path) {
     if (!status_pub_.start(domain)) { std::cerr << "[NavSystem] status publisher failed\n"; stop(); return false; }
     status_pub_started_ = true;
 
-    // ── worker config (env) ───────────────────────────────────────────────────
-    // Follower cruise speed is env-tunable; terminal dock behavior is per-destination (config).
+    // ── worker config ──────────────────────────────────────────────────────────
+    // Cruise + turn speed from config (navigation:); the dock approach creep reuses v_max (unified).
     FollowConfig fc;
-    if (const char* v = std::getenv("NAV_VMAX")) fc.v_max = std::atof(v);
+    if (const auto nav = root["navigation"]) {
+        fc.v_max    = nav["v_max"].as<double>(fc.v_max);
+        fc.vyaw_max = nav["vyaw_max"].as<double>(fc.vyaw_max);
+        fc.k_yaw    = nav["k_yaw"].as<double>(fc.k_yaw);
+        if (nav["yaw_deadband_deg"])
+            fc.yaw_deadband_rad = nav["yaw_deadband_deg"].as<double>() * M_PI / 180.0;
+    }
+    if (const char* v = std::getenv("NAV_VMAX")) fc.v_max = std::atof(v);   // env override (compat)
     // Arrival debounce: ARRIVED is only published after the robot holds at the goal this long
     // (default 1.0 s; env-tunable) so a one-frame flicker never falsely signals arrival.
     double arrival_hold_s = 1.0;

@@ -35,7 +35,6 @@ bool GoalCommandReceiver::load(const std::string& path) {
             g.dock.approach   = d["approach"].as<bool>(false);
             g.dock.standoff_m = d["standoff_m"].as<float>(g.dock.standoff_m);
             g.dock.trigger_m  = d["trigger_m"].as<float>(g.dock.trigger_m);
-            g.dock.speed      = d["speed"].as<float>(g.dock.speed);
             if (!g.name.empty()) catalog_[g.name] = g;
         }
     } catch (const std::exception& e) {

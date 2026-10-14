@@ -18,14 +18,17 @@
 namespace kist {
 
 struct FollowConfig {
-    double v_max         = 0.27;   // m/s cruise speed (lowered from 0.35 — gentler drive)
+    double v_max         = 0.32;   // m/s cruise speed; ALSO the dock approach creep (unified). Config: navigation.v_max
     double min_speed_m   = 0.20;   // controller floor: a nonzero translate command is bumped up
                                    // to this (the loco stack ignores speeds below ~0.2 m/s)
-    double vyaw_max      = 0.5;    // rad/s max turn rate (~28.6 deg/s; lowered from 0.8 — gentler turns)
+    double vyaw_max      = 0.5;    // rad/s max turn rate (~28.6 deg/s). Config: navigation.vyaw_max
     double lookahead_m   = 0.4;    // pure-pursuit lookahead distance
     double arrival_tol_m = 0.20;   // within this of the goal -> stop translating, align yaw
     double yaw_tol_rad   = 0.087;  // ~5 deg; within this of the goal yaw -> arrived (stop)
-    double k_yaw         = 1.5;    // steering / rotate proportional gain
+    double k_yaw         = 1.0;    // steering / rotate proportional gain (lowered 1.5->1.0; less weaving). Config: navigation.k_yaw
+    double yaw_deadband_rad = 0.105; // driving steer: ignore |head_err| below this (~6 deg) so the nose
+                                     // doesn't micro-weave (holonomic: cross-track is handled by strafe,
+                                     // not yaw, so a yaw deadband is safe). Config: navigation.yaw_deadband_deg
     double slow_radius_m = 0.5;    // taper forward speed within this of the goal
     bool   allow_strafe  = true;   // holonomic (vx+vy toward lookahead); false = car-like (vx only)
     float  react_ahead_m = 1.0;    // reactive-stop lookahead: stop if the path is blocked within this

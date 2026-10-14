@@ -22,7 +22,7 @@
 #               NOTE: lethal is inflated ~robot_radius from the real object, so the physical
 #               gap to the object surface is roughly standoff_m + inflation. Tune by measuring.
 #   trigger_m   approach only engages if an object is within this ahead (default 1.20).
-#   speed       approach creep speed, m/s (default 0.35; loco floor ~0.2).
+#   (creep speed is unified with cruise: the approach moves at navigation.v_max, not per-destination.)
 #
 # Replace the examples below with the real surveyed positions on the G1.
 
