@@ -50,7 +50,7 @@ NavCommand PathFollower::compute(const Path& path, const Pose2D& pose, const Doc
             const float d = front_distance(*cm, pose, dock.trigger_m);
             if (d < dock.trigger_m && d > dock.standoff_m) {
                 set_phase(FollowPhase::Approaching);
-                cmd.vx = dock.speed;            // straight forward (already facing the object)
+                cmd.vx = cfg_.v_max;            // creep forward at cruise speed (dock unified with v_max)
                 return cmd;
             }
         }
@@ -83,7 +83,10 @@ NavCommand PathFollower::compute(const Path& path, const Pose2D& pose, const Doc
     const double left = -s*dx + c*dy;
     const double head_err = std::atan2(left, fwd);
 
-    cmd.vyaw = std::clamp(cfg_.k_yaw * head_err, -cfg_.vyaw_max, cfg_.vyaw_max);
+    // Deadband: ignore tiny heading errors so the nose doesn't micro-weave chasing the near lookahead
+    // (holonomic — cross-track is corrected by strafe vx/vy, not by yaw, so a yaw deadband is safe).
+    const double he = (std::abs(head_err) < cfg_.yaw_deadband_rad) ? 0.0 : head_err;
+    cmd.vyaw = std::clamp(cfg_.k_yaw * he, -cfg_.vyaw_max, cfg_.vyaw_max);
     double speed = cfg_.v_max * std::min(1.0, dist_goal / std::max(1e-3, cfg_.slow_radius_m));
     speed = std::max(speed, cfg_.min_speed_m);   // loco floor: keep it moving until arrival
     const double mag = std::hypot(fwd, left);

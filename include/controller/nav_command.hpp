@@ -33,7 +33,7 @@ struct DockConfig {
     bool  approach   = false;   // creep forward to a standoff from the front object
     float standoff_m = 0.40f;   // approach: hold this distance to the nearest lethal cell ahead
     float trigger_m  = 1.20f;   // approach: only creep if an object is within this ahead
-    float speed      = 0.35f;   // approach: creep speed (m/s; >= loco floor ~0.2)
+    // (no creep speed here — the approach phase moves at FollowConfig.v_max, unified with cruise)
 };
 
 } // namespace kist
