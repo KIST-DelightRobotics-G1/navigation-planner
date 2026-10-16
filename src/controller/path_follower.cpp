@@ -50,7 +50,7 @@ NavCommand PathFollower::compute(const Path& path, const Pose2D& pose, const Doc
             const float d = front_distance(*cm, pose, dock.trigger_m);
             if (d < dock.trigger_m && d > dock.standoff_m) {
                 set_phase(FollowPhase::Approaching);
-                cmd.vx = cfg_.v_max;            // creep forward at cruise speed (dock unified with v_max)
+                cmd.vx = cfg_.dock_speed;       // creep forward at the (separate) dock speed
                 return cmd;
             }
         }

@@ -60,9 +60,10 @@ bool NavSystem::start(const std::string& config_path) {
     // Cruise + turn speed from config (navigation:); the dock approach creep reuses v_max (unified).
     FollowConfig fc;
     if (const auto nav = root["navigation"]) {
-        fc.v_max    = nav["v_max"].as<double>(fc.v_max);
-        fc.vyaw_max = nav["vyaw_max"].as<double>(fc.vyaw_max);
-        fc.k_yaw    = nav["k_yaw"].as<double>(fc.k_yaw);
+        fc.v_max      = nav["v_max"].as<double>(fc.v_max);
+        fc.dock_speed = nav["dock_speed"].as<double>(fc.dock_speed);
+        fc.vyaw_max   = nav["vyaw_max"].as<double>(fc.vyaw_max);
+        fc.k_yaw      = nav["k_yaw"].as<double>(fc.k_yaw);
         if (nav["yaw_deadband_deg"])
             fc.yaw_deadband_rad = nav["yaw_deadband_deg"].as<double>() * M_PI / 180.0;
     }
