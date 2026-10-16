@@ -18,7 +18,8 @@
 namespace kist {
 
 struct FollowConfig {
-    double v_max         = 0.32;   // m/s cruise speed; ALSO the dock approach creep (unified). Config: navigation.v_max
+    double v_max         = 0.32;   // m/s cruise speed. Config: navigation.v_max
+    double dock_speed    = 0.22;   // m/s approach/dock creep (separate from cruise). Config: navigation.dock_speed
     double min_speed_m   = 0.20;   // controller floor: a nonzero translate command is bumped up
                                    // to this (the loco stack ignores speeds below ~0.2 m/s)
     double vyaw_max      = 0.5;    // rad/s max turn rate (~28.6 deg/s). Config: navigation.vyaw_max
