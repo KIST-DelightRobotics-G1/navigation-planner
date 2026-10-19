@@ -48,9 +48,10 @@ navigation:
   drive: false    # false = preview (no Twist published; robot will NOT move).
                   # true  = arm the Twist output on rt/kist/nav/cmd_vel -> gearsonic. THE ROBOT MOVES.
   survey: false   # true = print the robot's MAP-frame pose each cycle (for surveying destinations).
-  v_max: 0.32     # m/s forward cruise speed; ALSO the dock approach creep (unified). Loco floor ~0.2.
-  vyaw_max: 0.5   # rad/s max turn rate (~28.6 deg/s).
-  k_yaw: 1.0      # steering proportional gain (lower = gentler turns, less weaving).
+  v_max: 0.32     # m/s forward cruise speed. Loco floor ~0.2.
+  dock_speed: 0.27  # m/s approach/dock creep (separate from cruise; loco floor ~0.2).
+  vyaw_max: 0.45  # rad/s max turn rate (~25.8 deg/s).
+  k_yaw: 0.8      # steering proportional gain (lower = gentler turns, less weaving).
   yaw_deadband_deg: 6   # ignore heading errors below this while driving (kills micro-weave; strafe still tracks).
 
 # Run logging (both overwritten each run, read after the fact):
