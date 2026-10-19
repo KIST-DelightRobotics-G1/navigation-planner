@@ -64,6 +64,7 @@ bool NavSystem::start(const std::string& config_path) {
         fc.dock_speed = nav["dock_speed"].as<double>(fc.dock_speed);
         fc.vyaw_max   = nav["vyaw_max"].as<double>(fc.vyaw_max);
         fc.k_yaw      = nav["k_yaw"].as<double>(fc.k_yaw);
+        fc.arrival_tol_m = nav["arrival_tol_m"].as<double>(fc.arrival_tol_m);
         if (nav["yaw_deadband_deg"])
             fc.yaw_deadband_rad = nav["yaw_deadband_deg"].as<double>() * M_PI / 180.0;
     }
