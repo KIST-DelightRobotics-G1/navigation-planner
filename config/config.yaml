@@ -51,8 +51,8 @@ navigation:
   v_max: 0.32     # m/s forward cruise speed. Loco floor ~0.2.
   dock_speed: 0.27  # m/s approach/dock creep (separate from cruise; loco floor ~0.2).
   vyaw_max: 0.45  # rad/s max turn rate (~25.8 deg/s).
-  k_yaw: 0.8      # steering proportional gain (lower = gentler turns, less weaving).
-  yaw_deadband_deg: 6   # ignore heading errors below this while driving (kills micro-weave; strafe still tracks).
+  k_yaw: 0.6      # steering proportional gain (lower = gentler turns, less weaving).
+  yaw_deadband_deg: 15  # ignore heading errors below this while driving (kills micro-weave; strafe still tracks).
   arrival_tol_m: 0.12   # stop within this of the goal (plain goals). Floor ~0.1 (loco stop dist @ min_speed 0.2);
                         # below ~0.1 risks hunting at the goal. Dock goals use standoff_m instead.
 
