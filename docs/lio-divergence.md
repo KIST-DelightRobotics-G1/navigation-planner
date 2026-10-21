@@ -80,3 +80,60 @@ Both live in the FAST-LIO measurement stage (`h_share_model`, via `docker/patche
 - Divergence log archive: `~/nav_diverge_logs/` (per-case `matpre/lio/trace` + `INDEX.md` analysis;
   `save_diverge.sh <container> <desc>` snapshots new cases). Not in the repo (large, gitignored).
 - Instrumentation: `[lio_metrics]` in the LIO log + `mat_pre.txt`. nav trace via `tools/read_trace.py`.
+
+## Measured case data
+
+Raw logs live in `~/nav_diverge_logs/` (not in the repo — large, gitignored). Distilled numbers below.
+
+### Case index
+| case | diverged? | summary |
+|---|---|---|
+| pristine-walk-443km | **YES** (pristine LIO) | ~14 min, mostly parked; velocity runaway w/ small dpos → 443,824 m |
+| reject-walk-1270m | **YES** (our reject) | min_feats=50 false-rejects → map froze → IMU runaway → 1270 m |
+| fullscenario-bounded | no | nav→VLA→handling, 8.7 min, \|pos\| ≤ 2.4 m, bounded |
+| vla-trembling | no | manip-only (standing); feats 130→~60 + drot rise, self-recovered |
+| noreject-clean | no | pristine walk, ~18 m out-and-back, recovered to 0.26 m |
+
+### pristine-walk-443km — the real one
+
+**A. Trajectory** (healthy ~700 s, then runaway; grav tilt stays nominal → not a gravity-state collapse):
+
+| t(s) | \|pos\| (m) | \|vel\| (m/s) | grav_tilt (deg) |
+|---|---|---|---|
+| 0 | 0.02 | 0.02 | 1.6 |
+| 122 | 0.64 | 0.09 | 1.5 |
+| 244 | 1.36 | 0.12 | 1.3 |
+| 365 | 1.42 | 0.14 | 1.1 |
+| 487 | 1.40 | 0.14 | 1.2 |
+| 608 | 1.41 | 0.18 | 1.2 |
+| 730 | 2.48 | 0.69 | 1.2 |
+| 851 | 12,607 | 354 | 1.1 |
+| 973 | 107,623 | 1,217 | 1.2 |
+| 1094 | 307,062 | 2,092 | 1.2 |
+
+**B. Accel-bias \|ba\| vs \|vel\|** (80 s steps) — |ba| creeps 0.03→0.32 over ~12 min (poor stationary observability) while |vel| stays ~0.1, then both explode together:
+
+| t(s) | \|ba\| | \|vel\| |
+|---|---|---|
+| 0 | 0.030 | 0.02 |
+| 240 | 0.089 | 0.11 |
+| 480 | 0.191 | 0.11 |
+| 640 | 0.252 | 0.19 |
+| 720 | 0.317 | 0.18 |
+| 800 | 0.262 | 14.95 |
+| 880 | 0.875 | 404.9 |
+| 1040 | 3.048 | 1533.8 |
+| 1200 | 3.415 | 2521.3 |
+
+**C. Ignition** (`[lio_metrics]`, 10 s windows) — **velocity jumps 0.3→13→256 m/s while dpos (LiDAR correction) stays small and feats stays ~45 until later**; the LiDAR does NOT yank the pose, the velocity state runs away and the LiDAR can't arrest it (feats/res are lagging, not predictors):
+
+| t(s) | feats_avg | dpos_max (m) | res_max (m) | vel_max (m/s) |
+|---|---|---|---|---|
+| 820–830 | 46 | 0.052 | 0.051 | 0.4 |
+| 830–840 | 46 | 0.042 | 0.051 | 0.3 |
+| 840–850 | 43 | 0.088 | 0.109 | 13.3 |
+| 850–860 | 41 | 0.111 | 0.117 | 17.4 |
+| 860–870 | 43 | 0.146 | 0.104 | 41.9 |
+| 870–880 | 31 | 0.459 | 0.239 | 126.9 |
+| 880–890 | 33 | 0.887 | 0.219 | 197.4 |
+| 890–900 | 33 | 1.034 | 0.291 | 256.0 |
