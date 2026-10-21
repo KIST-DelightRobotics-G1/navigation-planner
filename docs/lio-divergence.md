@@ -83,7 +83,9 @@ Both live in the FAST-LIO measurement stage (`h_share_model`, via `docker/patche
 
 ## Measured case data
 
-Raw logs live in `~/nav_diverge_logs/` (not in the repo — large, gitignored). Distilled numbers below.
+Raw logs live in `~/nav_diverge_logs/` on the dev machine. The two **diverged** cases' raw logs
+(`matpre.txt` / `lio.log` / `trace`) are also committed in-repo under `docs/lio-divergence-logs/`
+so other sessions/machines can read them directly. Distilled numbers below.
 
 ### Case index
 | case | diverged? | summary |
