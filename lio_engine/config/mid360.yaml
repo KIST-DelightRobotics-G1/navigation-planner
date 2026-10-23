@@ -1,10 +1,10 @@
 /**:
   ros__parameters:
     feature_extract_enable: false
-    point_filter_num: 3
+    point_filter_num: 1                # was 3 — keep every raw point (2026-10-21, see docs/lio-divergence.md)
     max_iteration: 3
-    filter_size_surf: 0.5
-    filter_size_map: 0.5
+    filter_size_surf: 0.2              # was 0.5 — indoor Mid-360 value; raises effective feats from ~45 to hundreds
+    filter_size_map: 0.2               # was 0.5 — paired with surf (upstream convention); denser map → better 5-NN plane fits
     cube_side_length: 1000.0
     runtime_pos_log_enable: false
     map_file_path: "./test.pcd"
@@ -34,7 +34,7 @@
       b_gyr_cov: 0.0001
       fov_degree: 360.0
       det_range: 100.0
-      extrinsic_est_en: true
+      extrinsic_est_en: false          # was true — built-in IMU, extrinsic is a datasheet constant; online estimate drifted 4 cm (2026-10-21)
       extrinsic_T: [-0.011, -0.02329, 0.04412]   # Mid-360 imu<->lidar (datasheet)
       extrinsic_R: [1., 0., 0., 0., 1., 0., 0., 0., 1.]
 
