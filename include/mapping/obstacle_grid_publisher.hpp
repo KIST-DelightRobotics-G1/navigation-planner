@@ -6,6 +6,11 @@
 // ("camera_init"), so rviz shows the occupancy map with a heading arrow next to the
 // registered cloud. Publish-only, for visualization/validation — the planner consumes
 // the ObstacleGrid struct directly, not this wire form.
+//
+// One exception to "visualization only": rt/kist/nav/pose_map carries the robot base
+// in the FIXED map frame (T_map_odom ∘ T_odom_pelvis, the UWB/GICP-corrected pose) with
+// a real data stamp — a data product consumed by the kist-vla-inference transition
+// logger, published only while the localization lock is fresh.
 
 #include "lio/robot_transforms.hpp"
 #include "route_planner/perception/obstacle_grid_builder/obstacle_grid.hpp"
@@ -49,7 +54,8 @@ public:
                const std::string& sway_cloud_topic  = "rt/cloud_sway",
                const std::string& prior_map_topic   = "rt/prior_map",
                const std::string& frame_id        = "camera_init",   // LIO odom frame
-               const std::string& leveled_cloud_topic = "rt/leveled_cloud");
+               const std::string& leveled_cloud_topic = "rt/leveled_cloud",
+               const std::string& map_pose_topic  = "rt/kist/nav/pose_map");
 
     // Convert + publish one grid snapshot (and the robot pose from grid.robot_*).
     void publish(const ObstacleGrid& g, const ObstacleGridConfig& cfg);
@@ -94,6 +100,11 @@ public:
     void publish_clearance(const Costmap& cm, const std::vector<float>& clr, float max_m = 2.0f);
     void publish_medial(const std::vector<std::pair<float, float>>& points);
 
+    // The robot base in the FIXED map frame on rt/kist/nav/pose_map (frame_id "map"),
+    // stamped with the LIO data time (NOT 0 like the rviz topics — subscribers do
+    // nearest-timestamp matching against it). yaw is about +Z; planar pose only.
+    void publish_map_pose(double x, double y, double yaw, int64_t stamp_ns);
+
     ObstacleGridPublisher(const ObstacleGridPublisher&) = delete;
     ObstacleGridPublisher& operator=(const ObstacleGridPublisher&) = delete;
 
@@ -114,6 +125,7 @@ private:
     std::unique_ptr<PathPub> sway_cloud_pub_;    // registered scan + sway (shaking, rt/cloud_sway)
     std::unique_ptr<PathPub> prior_map_pub_;     // prior map in odom (global-frame overlay)
     std::unique_ptr<PathPub> leveled_cloud_pub_; // gravity-leveled scan (rt/leveled_cloud)
+    std::unique_ptr<PosePub> map_pose_pub_;      // base in the MAP frame (rt/kist/nav/pose_map)
 };
 
 } // namespace kist

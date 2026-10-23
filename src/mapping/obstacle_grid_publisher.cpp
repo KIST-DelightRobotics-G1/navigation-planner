@@ -78,7 +78,8 @@ bool ObstacleGridPublisher::start(int domain_id, const std::string& network_inte
                                   const std::string& medial_topic, const std::string& lidar_pose_topic,
                                   const std::string& pelvis_pose_topic, const std::string& sway_cloud_topic,
                                   const std::string& prior_map_topic, const std::string& frame_id,
-                                  const std::string& leveled_cloud_topic) {
+                                  const std::string& leveled_cloud_topic,
+                                  const std::string& map_pose_topic) {
     frame_ = frame_id;
     try {
         unitree::robot::ChannelFactory::Instance()->Init(domain_id, network_interface);  // no-op if inited
@@ -106,6 +107,8 @@ bool ObstacleGridPublisher::start(int domain_id, const std::string& network_inte
         prior_map_pub_->InitChannel();
         leveled_cloud_pub_.reset(new PathPub(leveled_cloud_topic));
         leveled_cloud_pub_->InitChannel();
+        map_pose_pub_.reset(new PosePub(map_pose_topic));
+        map_pose_pub_->InitChannel();
     } catch (const std::exception& e) {
         std::cerr << "[ObstacleGridPublisher] DDS init failed: " << e.what() << "\n";
         return false;
@@ -164,6 +167,21 @@ void ObstacleGridPublisher::publish(const ObstacleGrid& g, const ObstacleGridCon
     ps.pose().orientation().y(0.0);
     ps.pose().orientation().z(std::sin(g.robot_yaw * 0.5f));
     pose_pub_->Write(ps);
+}
+
+void ObstacleGridPublisher::publish_map_pose(double x, double y, double yaw, int64_t stamp_ns) {
+    if (!map_pose_pub_) return;
+    geometry_msgs::msg::dds_::PoseStamped_ ps;
+    ps.header().frame_id() = "map";           // the prior-map frame, not frame_ (odom)
+    set_stamp(ps.header().stamp(), stamp_ns); // real data time — subscribers match on it
+    ps.pose().position().x(x);
+    ps.pose().position().y(y);
+    ps.pose().position().z(0.0);
+    ps.pose().orientation().w(std::cos(yaw * 0.5));   // yaw about +Z
+    ps.pose().orientation().x(0.0);
+    ps.pose().orientation().y(0.0);
+    ps.pose().orientation().z(std::sin(yaw * 0.5));
+    map_pose_pub_->Write(ps);
 }
 
 void ObstacleGridPublisher::publish_frames(const RobotTransforms& tf) {

@@ -17,6 +17,22 @@ namespace {
 double yaw_of(const Eigen::Quaterniond& q) {
     return std::atan2(2 * (q.w()*q.z() + q.x()*q.y()), 1 - 2 * (q.y()*q.y() + q.z()*q.z()));
 }
+
+// The base's planar pose in the MAP frame: T_map_odom ∘ T_odom_pelvis (yaw about +Z).
+struct MapPose { double x, y, yaw; };
+MapPose map_pose_of(const Eigen::Matrix4f& T_map_odom, const RobotTransforms& rt) {
+    const Eigen::Matrix4f& T = T_map_odom;
+    const double px = rt.T_odom_pelvis.translation.x();
+    const double py = rt.T_odom_pelvis.translation.y();
+    const double yo = yaw_of(rt.T_odom_pelvis.rotation);
+    return { T(0,0)*px + T(0,1)*py + T(0,3),
+             T(1,0)*px + T(1,1)*py + T(1,3),
+             yo + std::atan2(T(1,0), T(0,0)) };
+}
+
+// Past this age the map->odom lock is stale (the 1 Hz localization loop missed ~3
+// cycles — LOST or dying); rt/kist/nav/pose_map goes silent instead of shipping it.
+constexpr double kMapOdomFreshMs = 3000.0;
 }  // namespace
 
 void VizWorker::start(DataBuffer<ObstacleGrid>& grid_buf, DataBuffer<Costmap>& costmap_buf,
@@ -83,6 +99,18 @@ void VizWorker::run() {
                 }
             }
         }
+        // Map-frame base pose (rt/kist/nav/pose_map): the UWB/GICP-corrected FIXED-frame
+        // pose, stamped with the LIO data time — the VLA transition logger's x/y/yaw
+        // source. Gated on lock freshness: a stale map->odom edge (localization LOST or
+        // still searching) publishes nothing, so subscribers see silence, not a lie.
+        {
+            const auto mo_t = mapodom_->GetDataWithTime();
+            if (auto rt = prod_->out_buf.GetData();
+                rt && mo_t.HasData() && mo_t.GetAgeMs() < kMapOdomFreshMs) {
+                const MapPose p = map_pose_of(mo_t.data->T_map_odom, *rt);
+                pub_->publish_map_pose(p.x, p.y, p.yaw, rt->stamp_ns);
+            }
+        }
         // Survey (navigation.survey): print the robot's MAP-frame pose so you can drive it to a spot
         // (e.g. in front of the fridge) and read the x/y/yaw to paste into destinations.yaml.
         if (survey_) {
@@ -92,16 +120,10 @@ void VizWorker::run() {
                 auto mo = mapodom_->GetData();
                 auto rt = prod_->out_buf.GetData();
                 if (mo && rt) {
-                    const Eigen::Matrix4f& T = mo->T_map_odom;   // p_map = T * p_odom
-                    const double px = rt->T_odom_pelvis.translation.x();
-                    const double py = rt->T_odom_pelvis.translation.y();
-                    const double yo = yaw_of(rt->T_odom_pelvis.rotation);
-                    const double mx = T(0,0)*px + T(0,1)*py + T(0,3);
-                    const double my = T(1,0)*px + T(1,1)*py + T(1,3);
-                    const double ym = yo + std::atan2(T(1,0), T(0,0));
+                    const MapPose p = map_pose_of(mo->T_map_odom, *rt);
                     std::printf("[survey] robot MAP pose: x=%.3f y=%.3f yaw_deg=%.1f  "
                                 "-> destinations.yaml (x,y; yaw_deg=arrival heading)\n",
-                                mx, my, ym * 57.2958);
+                                p.x, p.y, p.yaw * 57.2958);
                 } else {
                     std::printf("[survey] waiting for map->odom lock...\n");
                 }
