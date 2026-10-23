@@ -1,6 +1,8 @@
 # FAST-LIO divergence — cause, attempts, and solution directions
 
-**Status: deferred (hardest problem, lowest solve-probability). Pick up in a dedicated session.**
+**Status: in progress — 2026-10-21 raw-log analysis revised the root cause (feature starvation +
+online-extrinsic drift, attitude-first ignition) and applied a config-only first fix on
+`tune/lio-feature-density`; see the dated section at the end. Awaiting a verification run.**
 
 FAST-LIO odom occasionally blows up (pos → hundreds of thousands of m, vel → thousands m/s).
 Goal: **keep LIO from diverging — especially during VLA (arm) manipulation — via a principled
@@ -139,3 +141,86 @@ so other sessions/machines can read them directly. Distilled numbers below.
 | 870–880 | 31 | 0.459 | 0.239 | 126.9 |
 | 880–890 | 33 | 0.887 | 0.219 | 197.4 |
 | 890–900 | 33 | 1.034 | 0.291 | 256.0 |
+
+## 2026-10-21 — raw-log analysis and first config change
+
+Analysed the committed raw logs (`docs/lio-divergence-logs/2026-10-13_pristine-walk_DIVERGED-443km`,
+`matpre.txt` + `[lio_metrics]`) scan by scan. This revises the picture above.
+
+### What the data shows
+1. **Ten minutes of monotonic degradation before ignition, at (near) standstill.** 60 s means:
+
+   | t (s) | feats | drot (°/scan) | res (m) | dpos (m) |
+   |---|---|---|---|---|
+   | 0–180 | 215 | 0.30 | 0.027 | 0.004 |
+   | 300–360 | 127 | 0.49 | 0.032 | 0.007 |
+   | 540–600 | 105 | 0.57 | 0.033 | 0.011 |
+   | 660–720 | 62 | 0.75 | 0.039 | 0.018 |
+   | 780–840 | 83 | 0.64 | 0.037 | 0.014 |
+   | 840–900 | 42 | 1.62 | 0.067 | 0.036 |
+
+   A static scene should give constant feats. Falling feats + rising residual at standstill = a
+   positive feedback: jittery pose → blurred ikd-tree map → fewer plane fits → noisier pose.
+2. **Ignition order is attitude → velocity, not velocity first.** 843–848 s: roll rotates
+   −2° → +22° in 10 s (bg barely moves, so it is the LiDAR update doing it: drot 1–5°/scan with
+   feats 17–45), and vel_y integrates to −8.5 m/s from the gravity leak (g·sin 20° ≈ 3.4 m/s²).
+   dpos stays small because each misplaced scan is inserted into the map and the next scan matches
+   it — the map follows the drift, so the LiDAR cannot arrest it. The earlier "velocity runs away
+   while LiDAR agrees" reading was the same event seen from the wrong side.
+3. **Three weakly-observable states were trading the same error.** With `extrinsic_est_en: true`
+   the online IMU↔LiDAR extrinsic drifted to (−29, +40, −30) mm from the datasheet value (whose own
+   magnitude is only (−11, −23, +44) mm) and 0.4–0.8° in rotation; `ba` grew only on the horizontal
+   axes (x +0.25, y −0.26 m/s², non-physical for a MEMS bias); the gravity direction rotated 0.5°.
+   Extrinsic and gravity have zero process noise in IKFoM, so once they absorb an error nothing
+   pulls them back. The `|ba|` creep in the tables above is this, not a real bias.
+4. **The nav trace covers only the 92 s walk, not the ignition**, so the suspected external
+   lift/remote move at ~843 s could not be confirmed from the body IMU. Either way it was the last
+   straw on top of (1)–(3), not the cause.
+5. **Effective feature count ~45–80 is the sick number.** Upstream FAST-LIO typically runs with
+   1,000+ effective points; the healthy first 3 min of this run had 215. 6-DoF attitude (roll in
+   particular) needs floor/ceiling normals — at 45 points there was nothing holding roll.
+
+### Change applied (branch `tune/lio-feature-density`) — `lio_engine/config/mid360.yaml`
+| param | was | now | why |
+|---|---|---|---|
+| `point_filter_num` | 3 | 1 | keep every raw point |
+| `filter_size_surf` | 0.5 | 0.2 | standard indoor Mid-360 value; hundreds-to-1000+ effective points |
+| `filter_size_map` | 0.5 | 0.2 | paired with surf (upstream convention); denser map → better 5-NN plane fits |
+| `extrinsic_est_en` | true | false | built-in IMU: extrinsic is a datasheet constant; online estimate drifted 4 cm |
+
+Compute is not a constraint (LIO runs on a spare box, not the Jetson). Per-point information does
+scale with N (overconfidence), but the pose is already pinned by the LiDAR at N=45, so raising N to
+the upstream regime changes nothing qualitatively; bounding per-scan information (adaptive R) stays
+an optional later step together with a robust kernel. The only real limit is plane quality at very
+small voxels (< ~0.1 m), which 0.2 m stays clear of. Watch ikd-tree memory on long runs with the
+0.2 m map voxel.
+
+### How to verify — two runs, both required
+Only the two *diverged* cases are committed in-repo; the VLA baselines (`vla_OK-trembling`,
+`fullscenario_OK-bounded-2.4m`) live only in `~/nav_diverge_logs/` on the dev machine. From INDEX.md,
+the old-param VLA baseline at the fridge was **feats 130 → ~60, drot 0.26 → 0.45°/scan** (bounded,
+self-recovered). That is the "before" for run B; commit those logs too so the same per-minute table
+can be produced for them.
+
+**A. Near-standstill, 20 min** (reproduces the 443 km case). Pass = the table in (1) stays flat:
+feats ≥ 150, drot ≈ 0.3°/scan, res ≈ 0.03 m; `ext_euler` / `offset_T_L_I` constant (they are now
+fixed, so this is a sanity check); `|ba|` ≤ ~0.05 and not trending.
+
+**B. Full nav → VLA (fridge) → handling → nav scenario** (the case this doc is actually for).
+Pass, inside the manipulation window:
+- feats stays ≥ 150 at the fridge (old: ~60). With ~1,000 points the arm/door points become a
+  few-percent minority of the constraint instead of a 20 % one at feats 45, so the dynamic-point
+  yank should *shrink*, not grow — this is the prediction to check.
+- drot ≤ 0.5°/scan (old: 0.45 peak), no sustained one-signed roll/pitch drift in `euler`
+  (the attitude-first signature from (2)).
+- `|vel|` ≤ commanded + 0.3 m/s throughout; `|pos|` bounded by the fridge distance (old: 2.4 m).
+- After the window: feats / res return to the pre-window level within ~10 s (no map pollution
+  left behind by the door/arm).
+If B fails while A passes, the remaining lever is the measurement side (robust kernel, item 3
+below), not more tuning of these four params.
+
+### Still open (next, in order)
+1. Log-only patch: add the min eigenvalue of the 6×6 pos+rot Hessian (HᵀH) per scan — the proper
+   degeneracy indicator (feats alone does not say which axis is unconstrained).
+2. Small process noise on `grav` (and extrinsic if ever re-enabled) so they cannot freeze on a wrong value.
+3. Robust kernel in `h_share_model` (#2 above) and, with it, per-scan information bounding.
